@@ -1,0 +1,7 @@
+1
+00:00:00,500 --> 00:00:02,200
+สวัสดีครับ Smart Subtitle
+
+2
+00:00:02,400 --> 00:00:04,500
+Hello world with clean subtitle style
