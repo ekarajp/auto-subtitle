@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import tempfile
 from pathlib import Path
 
 from PySide6.QtCore import QLocale, QSignalBlocker, Qt, QThread
@@ -86,6 +87,9 @@ class MainWindow(QMainWindow):
         self.subtitle_doc: SubtitleDocument | None = None
         self.render_thread: QThread | None = None
         self.render_worker: RenderWorker | None = None
+        self.preview_render_thread: QThread | None = None
+        self.preview_render_worker: RenderWorker | None = None
+        self._exact_preview_temp_dir: tempfile.TemporaryDirectory[str] | None = None
         self.speech_thread: QThread | None = None
         self.speech_worker: SpeechSyncWorker | None = None
         self._updating_table = False
@@ -682,6 +686,7 @@ class MainWindow(QMainWindow):
         self.preview_widget = SubtitlePreviewWidget()
         self.preview_widget.activeCueChanged.connect(self.select_subtitle_from_playback)
         self.preview_widget.accuratePreviewRequested.connect(self.render_accurate_preview)
+        self.preview_widget.accurateVideoRequested.connect(self.render_accurate_preview_video)
         layout.addWidget(self.preview_widget)
 
         self.summary_label = QLabel("Video: - | Subtitle count: 0")
@@ -1190,6 +1195,65 @@ class MainWindow(QMainWindow):
         self.preview_widget.show_accurate_preview_image(image, position_ms)
         self.log("Exact preview frame rendered. This frame uses the same FFmpeg/libass renderer as export.")
 
+    def render_accurate_preview_video(self) -> None:
+        if not self.video_info:
+            self._show_error("Exact Preview Video", "Please select a video first.")
+            return
+        if self.preview_render_thread is not None:
+            self._show_error("Exact Preview Video", "Exact preview video is already rendering.")
+            return
+        if not self.subtitle_doc:
+            self.parse_subtitles()
+        if not self.subtitle_doc:
+            return
+        if not self._sync_subtitles_from_table(show_errors=True):
+            return
+
+        if self._exact_preview_temp_dir is not None:
+            self._exact_preview_temp_dir.cleanup()
+        self._exact_preview_temp_dir = tempfile.TemporaryDirectory(prefix="smart_subtitle_exact_video_")
+        output_path = str(Path(self._exact_preview_temp_dir.name) / "exact_preview.mp4")
+        self.preview_widget.accurate_video_button.setEnabled(False)
+        self.preview_widget.accurate_preview_button.setEnabled(False)
+        self.progress_bar.setValue(0)
+        self.log("Rendering exact preview video. This uses the same FFmpeg/libass path as export and may take a while.")
+
+        self.preview_render_thread = QThread(self)
+        self.preview_render_worker = RenderWorker(
+            video_info=self.video_info,
+            cues=self.subtitle_doc.cues,
+            style=self.current_style(),
+            output_path=output_path,
+        )
+        self.preview_render_worker.moveToThread(self.preview_render_thread)
+        self.preview_render_thread.started.connect(self.preview_render_worker.run)
+        self.preview_render_worker.progress.connect(self.progress_bar.setValue)
+        self.preview_render_worker.log.connect(self.log)
+        self.preview_render_worker.finished.connect(self._accurate_preview_video_finished)
+        self.preview_render_worker.failed.connect(self._accurate_preview_video_failed)
+        self.preview_render_worker.finished.connect(self.preview_render_thread.quit)
+        self.preview_render_worker.failed.connect(self.preview_render_thread.quit)
+        self.preview_render_thread.finished.connect(self.preview_render_worker.deleteLater)
+        self.preview_render_thread.finished.connect(self.preview_render_thread.deleteLater)
+        self.preview_render_thread.finished.connect(self._accurate_preview_thread_finished)
+        self.preview_render_thread.start()
+
+    def _accurate_preview_video_finished(self, output_path: str) -> None:
+        self.progress_bar.setValue(100)
+        self.preview_widget.set_video_path(output_path, source_has_subtitles=True)
+        self.preview_widget.toggle_playback()
+        self.log("Exact preview video is ready. You can play or seek it from start to finish.")
+
+    def _accurate_preview_video_failed(self, message: str) -> None:
+        self.log(f"Exact preview video failed: {message}")
+        self._show_error("Exact Preview Video Failed", message)
+
+    def _accurate_preview_thread_finished(self) -> None:
+        self.preview_widget.accurate_video_button.setEnabled(True)
+        self.preview_widget.accurate_preview_button.setEnabled(True)
+        self.preview_render_thread = None
+        self.preview_render_worker = None
+
     def auto_cleanup_timings(self) -> None:
         if not self.video_info:
             self._show_error("Auto Timing", "กรุณาเลือกวิดีโอก่อน เพื่อคำนวณเวลาจากขนาดและความยาววิดีโอ")
@@ -1639,6 +1703,7 @@ class MainWindow(QMainWindow):
         self._updating_table = False
 
     def _refresh_preview_data(self) -> None:
+        self.preview_widget.reset_to_original_video()
         cues = self.subtitle_doc.cues if self.subtitle_doc else []
         self.preview_widget.set_cues(cues)
         self.preview_widget.set_style(self.current_style())

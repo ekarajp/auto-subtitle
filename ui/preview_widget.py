@@ -42,11 +42,16 @@ class VideoSubtitleCanvas(QWidget):
         self._position_seconds = 0.0
         self._frame_image: QImage | None = None
         self._frame_has_subtitles = False
+        self._source_has_subtitles = False
         self._fit_mode = "fit"
         self._fit_margin_percent = 0
 
     def set_video_info(self, info: VideoInfo | None) -> None:
         self._video_info = info
+        self.update()
+
+    def set_source_has_subtitles(self, enabled: bool) -> None:
+        self._source_has_subtitles = enabled
         self.update()
 
     def set_style(self, style: SubtitleStyle) -> None:
@@ -101,7 +106,7 @@ class VideoSubtitleCanvas(QWidget):
         painter.drawRect(video_rect.adjusted(0, 0, -1, -1))
 
         cue = self._active_cue()
-        if cue and self._video_info and not self._frame_has_subtitles:
+        if cue and self._video_info and not self._frame_has_subtitles and not self._source_has_subtitles:
             self._draw_subtitle(painter, video_rect, cue)
         painter.end()
 
@@ -274,12 +279,15 @@ class SubtitlePreviewWidget(QWidget):
 
     activeCueChanged = Signal(int)
     accuratePreviewRequested = Signal(int)
+    accurateVideoRequested = Signal()
 
     def __init__(self, parent: QWidget | None = None, *, allow_fullscreen: bool = True) -> None:
         super().__init__(parent)
         self.setMinimumHeight(280)
         self._video_info: VideoInfo | None = None
         self._video_path: Path | None = None
+        self._original_video_path: Path | None = None
+        self._source_has_subtitles = False
         self._style = SubtitleStyle()
         self._cues: list[SubtitleCue] = []
         self._accept_frames = True
@@ -308,6 +316,10 @@ class SubtitlePreviewWidget(QWidget):
         self.accurate_preview_button = QPushButton("Exact Frame")
         self.accurate_preview_button.setToolTip("Render this frame with FFmpeg/libass, the same engine used by export.")
         self.accurate_preview_button.clicked.connect(self.request_accurate_preview)
+
+        self.accurate_video_button = QPushButton("Exact Video")
+        self.accurate_video_button.setToolTip("Render a temporary preview video with FFmpeg/libass, then play it here.")
+        self.accurate_video_button.clicked.connect(self.request_accurate_video)
 
         self.fit_mode_combo = QComboBox()
         self.fit_mode_combo.addItem("Fit", "fit")
@@ -352,6 +364,7 @@ class SubtitlePreviewWidget(QWidget):
         button_row.addWidget(self.play_button)
         button_row.addWidget(self.full_preview_button)
         button_row.addWidget(self.accurate_preview_button)
+        button_row.addWidget(self.accurate_video_button)
         button_row.addStretch(1)
         button_row.addWidget(self.fit_mode_combo)
         button_row.addWidget(self.fit_margin_spin)
@@ -378,10 +391,18 @@ class SubtitlePreviewWidget(QWidget):
         self._video_info = info
         self.canvas.set_video_info(info)
 
-    def set_video_path(self, path: str | Path) -> None:
+    def set_video_path(self, path: str | Path, *, source_has_subtitles: bool = False) -> None:
         self._video_path = Path(path).resolve()
+        self._source_has_subtitles = source_has_subtitles
+        if not source_has_subtitles:
+            self._original_video_path = self._video_path
+        self.canvas.set_source_has_subtitles(source_has_subtitles)
         self.player.setSource(QUrl.fromLocalFile(str(self._video_path)))
         self.seek_to(0)
+
+    def reset_to_original_video(self) -> None:
+        if self._source_has_subtitles and self._original_video_path:
+            self.set_video_path(self._original_video_path, source_has_subtitles=False)
 
     def set_style(self, style: SubtitleStyle) -> None:
         self._style = SubtitleStyle.from_dict(style.to_dict())
@@ -420,6 +441,10 @@ class SubtitlePreviewWidget(QWidget):
     def request_accurate_preview(self) -> None:
         self.pause_playback()
         self.accuratePreviewRequested.emit(self.player.position())
+
+    def request_accurate_video(self) -> None:
+        self.pause_playback()
+        self.accurateVideoRequested.emit()
 
     def toggle_playback(self) -> None:
         if self._play_requested:
@@ -492,7 +517,7 @@ class SubtitlePreviewWidget(QWidget):
             return
         image = frame.toImage()
         if not image.isNull():
-            self.canvas.set_frame_image(image)
+            self.canvas.set_frame_image(image, has_subtitles=self._source_has_subtitles)
 
     def _position_changed(self, position: int) -> None:
         if not self.position_slider.isSliderDown():
