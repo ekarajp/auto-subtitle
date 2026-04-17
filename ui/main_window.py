@@ -55,7 +55,7 @@ from core.subtitle_parser import SUPPORTED_FORMATS, detect_subtitle_format, pars
 from core.subtitle_timing import cleanup_subtitle_timings
 from core.speech_sync import SpeechSyncOptions
 from core.video_info import VideoInfo, VideoProbeError, probe_video
-from core.ass_builder import wrap_subtitle_text
+from core.subtitle_layout import wrap_subtitle_text
 from ui.preview_widget import SubtitlePreviewWidget
 from ui.render_worker import RenderWorker
 from ui.speech_sync_worker import SpeechSyncWorker

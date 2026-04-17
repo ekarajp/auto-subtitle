@@ -11,11 +11,19 @@ from core.style_preset import (
     style_with_overrides,
 )
 from core.subtitle_models import SubtitleCue
+from core.subtitle_layout import (
+    ASS_FONT_SCALE,
+    style_for_ass_export as shared_style_for_ass_export,
+    subtitle_line_height,
+    subtitle_line_positions as shared_subtitle_line_positions,
+    subtitle_max_width,
+    wrap_subtitle_text as shared_wrap_subtitle_text,
+)
 from core.video_info import VideoInfo
 from utils.timecode import format_ass_time
 
 
-ASS_EXPORT_FONT_SCALE = 1.45
+ASS_EXPORT_FONT_SCALE = ASS_FONT_SCALE
 
 
 def build_ass_document(video_info: VideoInfo, cues: list[SubtitleCue], style: SubtitleStyle) -> str:
@@ -31,10 +39,7 @@ def style_for_ass_export(style: SubtitleStyle) -> SubtitleStyle:
     The app exposes one font-size control to users, so export is scaled here to
     visually match the real-time preview instead of asking users to compensate.
     """
-    copied = SubtitleStyle.from_dict(style.to_dict())
-    copied.font_size = max(1, round(copied.font_size * ASS_EXPORT_FONT_SCALE))
-    copied.line_spacing = round(copied.line_spacing * ASS_EXPORT_FONT_SCALE)
-    return copied
+    return shared_style_for_ass_export(style)
 
 
 def _build_header(video_info: VideoInfo, style: SubtitleStyle) -> str:
@@ -83,8 +88,8 @@ def _build_event_lines(video_info: VideoInfo, cue: SubtitleCue, style: SubtitleS
     style = style_for_ass_export(wrap_style)
     start = format_ass_time(cue.start)
     end = format_ass_time(cue.end)
-    lines = wrap_subtitle_text(cue.text, video_info, wrap_style, limit_lines=False)
-    positions = subtitle_line_positions(video_info, style, len(lines))
+    lines = shared_wrap_subtitle_text(cue.text, video_info, wrap_style, limit_lines=False)
+    positions = shared_subtitle_line_positions(video_info, style, len(lines), renderer="ass")
     blur_tag = f"\\blur{style.shadow_blur:.1f}" if style.shadow_blur > 0 else ""
 
     result: list[str] = []
@@ -108,8 +113,8 @@ def _build_background_box_event(
     if not positions:
         return f"Dialogue: 0,{start},{end},Box,,0,0,0,,"
 
-    line_height = max(1, round(style.font_size * 1.18 + style.line_spacing))
-    max_width = round(video_info.width * max(20, min(style.max_width_percent, 100)) / 100)
+    line_height = subtitle_line_height(style)
+    max_width = subtitle_max_width(video_info, style)
     pad_x = max(16, round(style.font_size * 0.45))
     pad_y = max(8, round(style.font_size * 0.24))
 
@@ -140,43 +145,7 @@ def _build_background_box_event(
 def subtitle_line_positions(
     video_info: VideoInfo, style: SubtitleStyle, line_count: int
 ) -> list[tuple[int, int, int]]:
-    line_count = max(1, line_count)
-    margin = effective_bottom_margin(video_info, style)
-    safe_x = effective_horizontal_margin(video_info, style)
-    line_height = max(1, round(style.font_size * 1.18 + style.line_spacing))
-    block_height = line_height * line_count
-
-    if style.text_position == "custom":
-        base_x = round(video_info.width * style.custom_x_percent / 100)
-        base_y = round(video_info.height * style.custom_y_percent / 100)
-        block_top = base_y - (block_height / 2)
-    else:
-        if style.alignment == "top_center":
-            block_top = margin
-        elif style.alignment == "center":
-            block_top = (video_info.height / 2) - (block_height / 2)
-        else:
-            block_top = video_info.height - margin - block_height
-
-        if style.alignment.endswith("_left"):
-            base_x = safe_x
-        elif style.alignment.endswith("_right"):
-            base_x = video_info.width - safe_x
-        else:
-            base_x = round(video_info.width / 2)
-
-    ass_alignment = 5
-    if style.alignment.endswith("_left"):
-        ass_alignment = 4
-    elif style.alignment.endswith("_right"):
-        ass_alignment = 6
-
-    positions = []
-    for idx in range(line_count):
-        y = max(8, min(video_info.height - 8, block_top + (idx * line_height) + (line_height / 2)))
-        x = max(8, min(video_info.width - 8, base_x))
-        positions.append((round(x), round(y), ass_alignment))
-    return positions
+    return shared_subtitle_line_positions(video_info, style, line_count, renderer="preview")
 
 
 def wrap_subtitle_text(
@@ -186,24 +155,7 @@ def wrap_subtitle_text(
     *,
     limit_lines: bool = True,
 ) -> list[str]:
-    source_lines = [line.strip() for line in text.replace("\\n", "\n").splitlines() if line.strip()]
-    if not source_lines:
-        return [""]
-
-    max_width_px = video_info.width * max(20, min(style.max_width_percent, 100)) / 100
-    visual_font_px = max(1.0, style.font_size * ASS_EXPORT_FONT_SCALE)
-    max_width_units = max(4.0, max_width_px / visual_font_px)
-
-    wrapped: list[str] = []
-    for source in source_lines:
-        wrapped.extend(_wrap_one_line(source, max_width_units, style.max_lines))
-
-    max_lines = max(1, style.max_lines)
-    if limit_lines and len(wrapped) > max_lines:
-        kept = wrapped[:max_lines]
-        kept[-1] = _truncate_text(kept[-1], max_width_units)
-        return kept
-    return wrapped
+    return shared_wrap_subtitle_text(text, video_info, style, limit_lines=limit_lines)
 
 
 def _wrap_one_line(text: str, max_width_units: float, max_lines: int) -> list[str]:

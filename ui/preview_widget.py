@@ -7,7 +7,13 @@ from PySide6.QtGui import QColor, QFont, QFontMetrics, QImage, QKeySequence, QPa
 from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer, QVideoSink
 from PySide6.QtWidgets import QComboBox, QDialog, QHBoxLayout, QLabel, QPushButton, QSlider, QSpinBox, QVBoxLayout, QWidget
 
-from core.ass_builder import style_for_ass_export, subtitle_line_positions, wrap_subtitle_text
+from core.subtitle_layout import (
+    style_for_preview,
+    subtitle_line_height,
+    subtitle_line_positions,
+    subtitle_max_width,
+    wrap_subtitle_text,
+)
 from core.style_preset import (
     SubtitleStyle,
     style_with_overrides,
@@ -134,20 +140,20 @@ class VideoSubtitleCanvas(QWidget):
     def _draw_subtitle(self, painter: QPainter, video_rect, cue: SubtitleCue) -> None:
         assert self._video_info is not None
         wrap_style = style_with_overrides(self._style, cue.style_overrides)
-        style = style_for_ass_export(wrap_style)
+        style = style_for_preview(wrap_style)
         scale_x = video_rect.width() / max(1, self._video_info.width)
         scale_y = video_rect.height() / max(1, self._video_info.height)
         lines = wrap_subtitle_text(cue.text, self._video_info, wrap_style, limit_lines=False)
-        positions = subtitle_line_positions(self._video_info, style, len(lines))
+        positions = subtitle_line_positions(self._video_info, style, len(lines), renderer="preview")
 
         font_size = max(1, round(style.font_size * scale_y))
         font = QFont(style.font_family)
         font.setPixelSize(font_size)
         painter.setFont(font)
 
-        source_line_height = max(1, round(style.font_size * 1.18 + style.line_spacing))
+        source_line_height = subtitle_line_height(style)
         line_height = source_line_height * scale_y
-        max_width = self._video_info.width * style.max_width_percent / 100
+        max_width = subtitle_max_width(self._video_info, style)
         max_width_view = max_width * scale_x
         box_padding_x = max(8, round(style.font_size * 0.45 * scale_x))
         box_padding_y = max(5, round(style.font_size * 0.24 * scale_y))
