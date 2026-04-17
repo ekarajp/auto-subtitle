@@ -79,10 +79,11 @@ def _build_header(video_info: VideoInfo, style: SubtitleStyle) -> str:
 
 
 def _build_event_lines(video_info: VideoInfo, cue: SubtitleCue, style: SubtitleStyle) -> list[str]:
-    style = _style_for_ass_export(style_with_overrides(style, cue.style_overrides))
+    wrap_style = style_with_overrides(style, cue.style_overrides)
+    style = _style_for_ass_export(wrap_style)
     start = format_ass_time(cue.start)
     end = format_ass_time(cue.end)
-    lines = wrap_subtitle_text(cue.text, video_info, style, limit_lines=False)
+    lines = wrap_subtitle_text(cue.text, video_info, wrap_style, limit_lines=False)
     positions = _line_positions(video_info, style, len(lines))
     blur_tag = f"\\blur{style.shadow_blur:.1f}" if style.shadow_blur > 0 else ""
 
@@ -189,48 +190,106 @@ def wrap_subtitle_text(
         return [""]
 
     max_width_px = video_info.width * max(20, min(style.max_width_percent, 100)) / 100
-    # Use a conservative average glyph width. Real exports use font rendering,
-    # so this first-pass wrap must avoid optimistic character counts.
-    max_chars = max(8, int(max_width_px / max(1, style.font_size * 1.0)))
+    visual_font_px = max(1.0, style.font_size * ASS_EXPORT_FONT_SCALE)
+    max_width_units = max(4.0, max_width_px / visual_font_px)
 
     wrapped: list[str] = []
     for source in source_lines:
-        wrapped.extend(_wrap_one_line(source, max_chars, style.max_lines))
+        wrapped.extend(_wrap_one_line(source, max_width_units, style.max_lines))
 
     max_lines = max(1, style.max_lines)
     if limit_lines and len(wrapped) > max_lines:
         kept = wrapped[:max_lines]
-        kept[-1] = _truncate_text(kept[-1], max_chars)
+        kept[-1] = _truncate_text(kept[-1], max_width_units)
         return kept
     return wrapped
 
 
-def _wrap_one_line(text: str, max_chars: int, max_lines: int) -> list[str]:
-    if len(text) <= max_chars:
+def _wrap_one_line(text: str, max_width_units: float, max_lines: int) -> list[str]:
+    del max_lines
+    if _text_width_units(text) <= max_width_units:
         return [text]
 
     lines: list[str] = []
     current = ""
     for word in _word_tokens(text):
         if not current:
-            if len(word) > max_chars and not _contains_thai(word):
-                lines.extend(_split_long_token(word, max_chars))
+            if _text_width_units(word) > max_width_units and not _contains_thai(word):
+                lines.extend(_split_long_token_by_width(word, max_width_units))
                 continue
             current = word
-        elif len(current) + 1 + len(word) <= max_chars:
-            current = _join_tokens(current, word)
         else:
-            if len(word) > max_chars:
+            candidate = _join_tokens(current, word)
+            if _text_width_units(candidate) <= max_width_units:
+                current = candidate
+                continue
+            if _text_width_units(word) > max_width_units:
                 if current:
                     lines.append(current)
                     current = ""
-                lines.extend(_split_long_token(word, max_chars))
+                lines.extend(_split_long_token_by_width(word, max_width_units))
                 continue
             lines.append(current)
             current = word
     if current:
         lines.append(current)
     return lines
+
+
+def _text_width_units(text: str) -> float:
+    return sum(_char_width_units(char) for char in text)
+
+
+def _char_width_units(char: str) -> float:
+    if _is_combining_mark(char):
+        return 0.0
+    if char.isspace():
+        return 0.32
+    code = ord(char)
+    if 0x0E00 <= code <= 0x0E7F:
+        return 0.62
+    if "A" <= char <= "Z":
+        return 0.64
+    if "a" <= char <= "z" or "0" <= char <= "9":
+        return 0.54
+    if char in ".,:;!?'\"-()[]{}":
+        return 0.34
+    if 0x4E00 <= code <= 0x9FFF or 0x3040 <= code <= 0x30FF or 0xAC00 <= code <= 0xD7AF:
+        return 0.95
+    return 0.58
+
+
+def _split_long_token_by_width(text: str, max_width_units: float) -> list[str]:
+    if _contains_thai(text):
+        tokens = _thai_word_tokens(text)
+        if len(tokens) > 1:
+            chunks: list[str] = []
+            current = ""
+            for token in tokens:
+                candidate = current + token if current else token
+                if _text_width_units(candidate) <= max_width_units:
+                    current = candidate
+                else:
+                    if current:
+                        chunks.append(current)
+                    current = token
+            if current:
+                chunks.append(current)
+            return chunks
+        return [text]
+
+    chunks: list[str] = []
+    current = ""
+    for char in text:
+        candidate = current + char
+        if current and _text_width_units(candidate) > max_width_units and not _is_combining_mark(char):
+            chunks.append(current)
+            current = char
+        else:
+            current = candidate
+    if current:
+        chunks.append(current)
+    return chunks
 
 
 def _word_tokens(text: str) -> list[str]:
@@ -344,12 +403,18 @@ def _is_combining_mark(char: str) -> bool:
     return unicodedata.category(char).startswith("M") or "\u0E31" <= char <= "\u0E4E"
 
 
-def _truncate_text(text: str, max_chars: int) -> str:
+def _truncate_text(text: str, max_width_units: float) -> str:
     ellipsis = "..."
-    limit = max(1, max_chars - len(ellipsis))
-    if len(text) <= max_chars:
+    if _text_width_units(text) <= max_width_units:
         return text
-    return text[:limit].rstrip() + ellipsis
+    limit = max(1.0, max_width_units - _text_width_units(ellipsis))
+    current = ""
+    for char in text:
+        candidate = current + char
+        if current and _text_width_units(candidate) > limit and not _is_combining_mark(char):
+            break
+        current = candidate
+    return current.rstrip() + ellipsis
 
 
 def escape_ass_text(text: str) -> str:

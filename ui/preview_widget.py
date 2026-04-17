@@ -371,6 +371,9 @@ class SubtitlePreviewWidget(QWidget):
             milliseconds = min(milliseconds, duration)
         if clear_forced_preview:
             self.canvas.clear_forced_selected_preview()
+        # A paused QMediaPlayer can still deliver one decoded frame after a seek.
+        # Keep frame acceptance open so selecting a subtitle updates the still image.
+        self._accept_frames = True
         self.player.setPosition(milliseconds)
         self.canvas.set_position(milliseconds / 1000.0)
         self._update_time_label(milliseconds, self.player.duration())
