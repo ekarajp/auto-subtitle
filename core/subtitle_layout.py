@@ -17,6 +17,9 @@ WRAP_FONT_SCALE = 1.45
 PREVIEW_FONT_SCALE = 1.45
 ASS_FONT_SCALE = 2.05
 ASS_Y_OFFSET_LINE_FACTOR = -0.10
+PREVIEW_Y_OFFSET_LINE_FACTOR = ASS_Y_OFFSET_LINE_FACTOR
+PREVIEW_BASELINE_SHIFT_FACTOR = -0.035
+PREVIEW_STROKE_SCALE = 1.18
 
 
 def style_for_preview(style: SubtitleStyle) -> SubtitleStyle:
@@ -101,6 +104,8 @@ def subtitle_line_positions(
     y_offset = 0.0
     if renderer == "ass":
         y_offset = line_height * ASS_Y_OFFSET_LINE_FACTOR
+    elif renderer == "preview":
+        y_offset = line_height * PREVIEW_Y_OFFSET_LINE_FACTOR
 
     positions = []
     for idx in range(line_count):
@@ -117,6 +122,14 @@ def subtitle_line_height(style: SubtitleStyle) -> int:
 
 def subtitle_max_width(video_info: VideoInfo, style: SubtitleStyle) -> int:
     return round(video_info.width * max(20, min(style.max_width_percent, 100)) / 100)
+
+
+def preview_baseline_shift(font_size: int) -> int:
+    return round(font_size * PREVIEW_BASELINE_SHIFT_FACTOR)
+
+
+def preview_stroke_width(stroke_width: float, scale_y: float) -> int:
+    return max(1, round(stroke_width * scale_y * PREVIEW_STROKE_SCALE))
 
 
 def _wrap_one_line(text: str, max_width_units: float) -> list[str]:

@@ -8,6 +8,8 @@ from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer, QVideoSink
 from PySide6.QtWidgets import QComboBox, QDialog, QHBoxLayout, QLabel, QPushButton, QSlider, QSpinBox, QVBoxLayout, QWidget
 
 from core.subtitle_layout import (
+    preview_baseline_shift,
+    preview_stroke_width,
     style_for_preview,
     subtitle_line_height,
     subtitle_line_positions,
@@ -232,7 +234,7 @@ class VideoSubtitleCanvas(QWidget):
                 ass_alignment=an,
                 fill_color=QColor(style.font_color),
                 stroke_color=QColor(style.stroke_color) if style.stroke_enabled and style.stroke_width > 0 else None,
-                stroke_width=max(1, round(style.stroke_width * scale_y)) if style.stroke_enabled else 0,
+                stroke_width=preview_stroke_width(style.stroke_width, scale_y) if style.stroke_enabled else 0,
             )
 
     def _fit_font_size(self, lines: list[str], family: str, start_size: int, max_width: float) -> int:
@@ -267,6 +269,7 @@ class VideoSubtitleCanvas(QWidget):
         else:
             x = text_rect.left() + (text_rect.width() - text_width) / 2
         y = text_rect.top() + (text_rect.height() + metrics.ascent() - metrics.descent()) / 2
+        y += preview_baseline_shift(max(1, font.pixelSize()))
         path.addText(x, y, font, text)
         if stroke_color and stroke_width > 0:
             painter.setPen(QPen(stroke_color, stroke_width, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
