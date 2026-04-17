@@ -62,32 +62,40 @@ def transcribe_video_to_cues(
 
     _emit(progress_callback, 2, f"Loading Whisper model: {options.model_size}")
     try:
-        model = WhisperModel(
-            options.model_size,
-            device="auto",
-            compute_type="default" if options.compute_type == "auto" else options.compute_type,
-        )
+        model = _load_whisper_model(WhisperModel, options, device="auto")
     except Exception as exc:
-        raise SpeechSyncError(f"Cannot load Whisper model '{options.model_size}': {exc}") from exc
+        if _is_cuda_runtime_error(exc):
+            _emit(
+                progress_callback,
+                3,
+                "CUDA/GPU runtime is not available. Falling back to CPU int8 transcription.",
+            )
+            try:
+                model = _load_whisper_model(WhisperModel, options, device="cpu", compute_type="int8")
+            except Exception as cpu_exc:
+                raise SpeechSyncError(
+                    f"Cannot load Whisper model '{options.model_size}' on GPU or CPU: {cpu_exc}"
+                ) from cpu_exc
+        else:
+            raise SpeechSyncError(f"Cannot load Whisper model '{options.model_size}': {exc}") from exc
 
     _emit(progress_callback, 8, "Transcribing video audio with word timestamps...")
     try:
-        segments, info = model.transcribe(
-            str(Path(video_info.path)),
-            language=options.language or None,
-            word_timestamps=True,
-            vad_filter=True,
-            beam_size=max(1, options.beam_size),
-            best_of=max(1, options.best_of),
-            temperature=0.0,
-            condition_on_previous_text=False,
-            compression_ratio_threshold=2.4,
-            log_prob_threshold=-1.0,
-            no_speech_threshold=0.6,
-            vad_parameters={"min_silence_duration_ms": round(options.pause_threshold * 1000)},
-        )
+        segments, info = _transcribe_with_model(model, video_info, options)
     except Exception as exc:
-        raise SpeechSyncError(f"Whisper transcription failed: {exc}") from exc
+        if _is_cuda_runtime_error(exc):
+            _emit(
+                progress_callback,
+                8,
+                "CUDA/GPU transcription failed. Retrying with CPU int8. This will be slower but does not need CUDA.",
+            )
+            try:
+                model = _load_whisper_model(WhisperModel, options, device="cpu", compute_type="int8")
+                segments, info = _transcribe_with_model(model, video_info, options)
+            except Exception as cpu_exc:
+                raise SpeechSyncError(f"Whisper CPU fallback failed: {cpu_exc}") from cpu_exc
+        else:
+            raise SpeechSyncError(f"Whisper transcription failed: {exc}") from exc
 
     language_label = getattr(info, "language", None) or options.language or "auto"
     _emit(progress_callback, 12, f"Detected language: {language_label}")
@@ -101,6 +109,58 @@ def transcribe_video_to_cues(
         raise SpeechSyncError("Speech was detected, but no subtitle cues could be built.")
     _emit(progress_callback, 100, f"Speech Sync generated {len(cues)} subtitle cue(s).")
     return cues
+
+
+def _load_whisper_model(
+    whisper_model_cls: object,
+    options: SpeechSyncOptions,
+    *,
+    device: str,
+    compute_type: str | None = None,
+) -> object:
+    selected_compute = compute_type or ("default" if options.compute_type == "auto" else options.compute_type)
+    return whisper_model_cls(
+        options.model_size,
+        device=device,
+        compute_type=selected_compute,
+    )
+
+
+def _transcribe_with_model(
+    model: object,
+    video_info: VideoInfo,
+    options: SpeechSyncOptions,
+) -> tuple[Iterable[object], object]:
+    return model.transcribe(
+        str(Path(video_info.path)),
+        language=options.language or None,
+        word_timestamps=True,
+        vad_filter=True,
+        beam_size=max(1, options.beam_size),
+        best_of=max(1, options.best_of),
+        temperature=0.0,
+        condition_on_previous_text=False,
+        compression_ratio_threshold=2.4,
+        log_prob_threshold=-1.0,
+        no_speech_threshold=0.6,
+        vad_parameters={"min_silence_duration_ms": round(options.pause_threshold * 1000)},
+    )
+
+
+def _is_cuda_runtime_error(exc: Exception) -> bool:
+    text = str(exc).lower()
+    markers = (
+        "cuda",
+        "cublas",
+        "cudnn",
+        "cufft",
+        "curand",
+        "cusolver",
+        "cusparse",
+        "ctranslate2",
+        "gpu",
+    )
+    return any(marker in text for marker in markers)
 
 
 def build_cues_from_words(
