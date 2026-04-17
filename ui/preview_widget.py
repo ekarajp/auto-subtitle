@@ -326,10 +326,12 @@ class SubtitlePreviewWidget(QWidget):
         self.position_slider.sliderMoved.connect(self.seek_to)
 
         self.time_label = QLabel("00:00:00.000 / 00:00:00.000")
+        self.time_label.setMinimumWidth(190)
+        self.time_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
 
         self.controls_bar = QWidget()
         self.controls_bar.setObjectName("PreviewControlsBar")
-        self.controls_bar.setMinimumHeight(52)
+        self.controls_bar.setMinimumHeight(84)
         self.controls_bar.setStyleSheet(
             "QWidget#PreviewControlsBar { background: #111820; border-top: 1px solid #34404C; } "
             "QPushButton { background: #F3F6FA; color: #111820; border: 1px solid #7E8A98; "
@@ -341,15 +343,26 @@ class SubtitlePreviewWidget(QWidget):
             "QSlider::handle:horizontal { background: #2B83D3; width: 16px; margin: -5px 0; border-radius: 8px; } "
             "QLabel { color: #F3F6FA; }"
         )
-        controls = QHBoxLayout(self.controls_bar)
-        controls.setContentsMargins(10, 6, 10, 6)
-        controls.addWidget(self.play_button)
-        controls.addWidget(self.full_preview_button)
-        controls.addWidget(self.accurate_preview_button)
-        controls.addWidget(self.fit_mode_combo)
-        controls.addWidget(self.fit_margin_spin)
-        controls.addWidget(self.position_slider, 1)
-        controls.addWidget(self.time_label)
+        controls = QVBoxLayout(self.controls_bar)
+        controls.setContentsMargins(10, 6, 10, 8)
+        controls.setSpacing(6)
+
+        button_row = QHBoxLayout()
+        button_row.setSpacing(8)
+        button_row.addWidget(self.play_button)
+        button_row.addWidget(self.full_preview_button)
+        button_row.addWidget(self.accurate_preview_button)
+        button_row.addStretch(1)
+        button_row.addWidget(self.fit_mode_combo)
+        button_row.addWidget(self.fit_margin_spin)
+
+        slider_row = QHBoxLayout()
+        slider_row.setSpacing(10)
+        slider_row.addWidget(self.position_slider, 1)
+        slider_row.addWidget(self.time_label)
+
+        controls.addLayout(button_row)
+        controls.addLayout(slider_row)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -456,7 +469,7 @@ class SubtitlePreviewWidget(QWidget):
         preview.fit_mode_combo.setCurrentIndex(self.fit_mode_combo.currentIndex())
         preview.fit_margin_spin.setValue(self.fit_margin_spin.value())
         preview.seek_to(current_position)
-        preview.controls_bar.setMinimumHeight(60)
+        preview.controls_bar.setMinimumHeight(92)
         dialog_layout.addWidget(preview)
 
         def sync_back_from_full_preview() -> None:
