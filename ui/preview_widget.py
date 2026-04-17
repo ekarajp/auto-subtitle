@@ -2,14 +2,15 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import QSignalBlocker, QUrl, Qt, Signal
-from PySide6.QtGui import QColor, QFont, QFontMetrics, QImage, QKeySequence, QPainter, QPainterPath, QPen, QShortcut
+from PySide6.QtCore import QPointF, QSignalBlocker, QUrl, Qt, Signal
+from PySide6.QtGui import QColor, QFont, QFontMetrics, QImage, QKeySequence, QPainter, QPen, QShortcut
 from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer, QVideoSink
 from PySide6.QtWidgets import QComboBox, QDialog, QHBoxLayout, QLabel, QPushButton, QSlider, QSpinBox, QVBoxLayout, QWidget
 
 from core.subtitle_layout import (
     preview_baseline_shift,
     preview_stroke_width,
+    style_for_ass_export,
     style_for_preview,
     subtitle_line_height,
     subtitle_line_positions,
@@ -151,10 +152,11 @@ class VideoSubtitleCanvas(QWidget):
         assert self._video_info is not None
         wrap_style = style_with_overrides(self._style, cue.style_overrides)
         style = style_for_preview(wrap_style)
+        layout_style = style_for_ass_export(wrap_style)
         scale_x = video_rect.width() / max(1, self._video_info.width)
         scale_y = video_rect.height() / max(1, self._video_info.height)
         lines = wrap_subtitle_text(cue.text, self._video_info, wrap_style, limit_lines=False)
-        positions = subtitle_line_positions(self._video_info, style, len(lines), renderer="preview")
+        positions = subtitle_line_positions(self._video_info, layout_style, len(lines), renderer="ass")
 
         font_size = max(1, round(style.font_size * scale_y))
         font = QFont(style.font_family)
@@ -163,12 +165,12 @@ class VideoSubtitleCanvas(QWidget):
         font.setStyleStrategy(QFont.StyleStrategy.PreferAntialias)
         painter.setFont(font)
 
-        source_line_height = subtitle_line_height(style)
+        source_line_height = subtitle_line_height(layout_style)
         line_height = source_line_height * scale_y
-        max_width = subtitle_max_width(self._video_info, style)
+        max_width = subtitle_max_width(self._video_info, layout_style)
         max_width_view = max_width * scale_x
-        box_padding_x = max(8, round(style.font_size * 0.45 * scale_x))
-        box_padding_y = max(5, round(style.font_size * 0.24 * scale_y))
+        box_padding_x = max(8, round(layout_style.font_size * 0.45 * scale_x))
+        box_padding_y = max(5, round(layout_style.font_size * 0.24 * scale_y))
 
         if style.background_enabled and lines:
             bg = QColor(style.background_color)
@@ -259,7 +261,6 @@ class VideoSubtitleCanvas(QWidget):
         stroke_color: QColor | None,
         stroke_width: int,
     ) -> None:
-        path = QPainterPath()
         metrics = QFontMetrics(font)
         text_width = metrics.horizontalAdvance(text)
         if ass_alignment == 4:
@@ -270,14 +271,24 @@ class VideoSubtitleCanvas(QWidget):
             x = text_rect.left() + (text_rect.width() - text_width) / 2
         y = text_rect.top() + (text_rect.height() + metrics.ascent() - metrics.descent()) / 2
         y += preview_baseline_shift(max(1, font.pixelSize()))
-        path.addText(x, y, font, text)
+        painter.setFont(font)
         if stroke_color and stroke_width > 0:
-            painter.setPen(QPen(stroke_color, stroke_width, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
-            painter.setBrush(Qt.BrushStyle.NoBrush)
-            painter.drawPath(path)
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(fill_color)
-        painter.drawPath(path)
+            painter.setPen(stroke_color)
+            for radius in range(1, stroke_width + 1):
+                offsets = [
+                    (-radius, 0),
+                    (radius, 0),
+                    (0, -radius),
+                    (0, radius),
+                    (-radius, -radius),
+                    (-radius, radius),
+                    (radius, -radius),
+                    (radius, radius),
+                ]
+                for dx, dy in offsets:
+                    painter.drawText(QPointF(x + dx, y + dy), text)
+        painter.setPen(fill_color)
+        painter.drawText(QPointF(x, y), text)
 
 
 class SubtitlePreviewWidget(QWidget):
