@@ -719,9 +719,16 @@ class MainWindow(QMainWindow):
         self.generate_button = QPushButton("Generate Subtitle Video")
         self.generate_button.clicked.connect(self.generate_video)
         self.generate_button.setMinimumHeight(42)
+        self.render_preview_button = QPushButton("Render Preview Video")
+        self.render_preview_button.setToolTip(
+            "Render a temporary preview video with the same FFmpeg/libass path used by export."
+        )
+        self.render_preview_button.clicked.connect(self.render_accurate_preview_video)
+        self.render_preview_button.setMinimumHeight(36)
         self.export_subtitle_button = QPushButton("Export Edited Subtitle")
         self.export_subtitle_button.clicked.connect(self.export_edited_subtitle)
         self.export_subtitle_button.setMinimumHeight(36)
+        layout.addWidget(self.render_preview_button)
         layout.addWidget(self.export_subtitle_button)
         layout.addWidget(self.generate_button)
         return group
@@ -1197,10 +1204,10 @@ class MainWindow(QMainWindow):
 
     def render_accurate_preview_video(self) -> None:
         if not self.video_info:
-            self._show_error("Exact Preview Video", "Please select a video first.")
+            self._show_error("Render Preview Video", "Please select a video first.")
             return
         if self.preview_render_thread is not None:
-            self._show_error("Exact Preview Video", "Exact preview video is already rendering.")
+            self._show_error("Render Preview Video", "Preview video is already rendering.")
             return
         if not self.subtitle_doc:
             self.parse_subtitles()
@@ -1215,8 +1222,9 @@ class MainWindow(QMainWindow):
         output_path = str(Path(self._exact_preview_temp_dir.name) / "exact_preview.mp4")
         self.preview_widget.accurate_video_button.setEnabled(False)
         self.preview_widget.accurate_preview_button.setEnabled(False)
+        self.render_preview_button.setEnabled(False)
         self.progress_bar.setValue(0)
-        self.log("Rendering exact preview video. This uses the same FFmpeg/libass path as export and may take a while.")
+        self.log("Rendering preview video with FFmpeg/libass. This uses the same path as final export and may take a while.")
 
         self.preview_render_thread = QThread(self)
         self.preview_render_worker = RenderWorker(
@@ -1242,15 +1250,16 @@ class MainWindow(QMainWindow):
         self.progress_bar.setValue(100)
         self.preview_widget.set_video_path(output_path, source_has_subtitles=True)
         self.preview_widget.toggle_playback()
-        self.log("Exact preview video is ready. You can play or seek it from start to finish.")
+        self.log("Render preview video is ready. You can play or seek it from start to finish.")
 
     def _accurate_preview_video_failed(self, message: str) -> None:
-        self.log(f"Exact preview video failed: {message}")
-        self._show_error("Exact Preview Video Failed", message)
+        self.log(f"Render preview video failed: {message}")
+        self._show_error("Render Preview Video Failed", message)
 
     def _accurate_preview_thread_finished(self) -> None:
         self.preview_widget.accurate_video_button.setEnabled(True)
         self.preview_widget.accurate_preview_button.setEnabled(True)
+        self.render_preview_button.setEnabled(True)
         self.preview_render_thread = None
         self.preview_render_worker = None
 

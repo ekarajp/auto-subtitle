@@ -91,6 +91,7 @@ class VideoSubtitleCanvas(QWidget):
         del event
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        painter.setRenderHint(QPainter.RenderHint.TextAntialiasing, True)
         painter.fillRect(self.rect(), QColor("#242A31"))
 
         video_rect = self._video_rect()
@@ -156,6 +157,8 @@ class VideoSubtitleCanvas(QWidget):
         font_size = max(1, round(style.font_size * scale_y))
         font = QFont(style.font_family)
         font.setPixelSize(font_size)
+        font.setHintingPreference(QFont.HintingPreference.PreferNoHinting)
+        font.setStyleStrategy(QFont.StyleStrategy.PreferAntialias)
         painter.setFont(font)
 
         source_line_height = subtitle_line_height(style)
@@ -317,7 +320,7 @@ class SubtitlePreviewWidget(QWidget):
         self.accurate_preview_button.setToolTip("Render this frame with FFmpeg/libass, the same engine used by export.")
         self.accurate_preview_button.clicked.connect(self.request_accurate_preview)
 
-        self.accurate_video_button = QPushButton("Exact Video")
+        self.accurate_video_button = QPushButton("Render Preview")
         self.accurate_video_button.setToolTip("Render a temporary preview video with FFmpeg/libass, then play it here.")
         self.accurate_video_button.clicked.connect(self.request_accurate_video)
 
