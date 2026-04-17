@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from PySide6.QtCore import QLocale, QSignalBlocker, Qt, QThread
-from PySide6.QtGui import QAction, QColor, QFont, QFontDatabase, QFontMetrics, QKeySequence
+from PySide6.QtGui import QAction, QColor, QFont, QFontDatabase, QFontMetrics, QImage, QKeySequence
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
@@ -37,6 +37,7 @@ from PySide6.QtWidgets import (
 
 from core.project_config import ProjectConfig, load_project_config, save_project_config
 from core.audio_analysis import detect_silences
+from core.preview_renderer import PreviewRenderError, render_accurate_preview_frame
 from core.renderer import ensure_ffmpeg
 from core.style_preset import (
     ALIGNMENTS,
@@ -680,6 +681,7 @@ class MainWindow(QMainWindow):
         layout = QVBoxLayout(group)
         self.preview_widget = SubtitlePreviewWidget()
         self.preview_widget.activeCueChanged.connect(self.select_subtitle_from_playback)
+        self.preview_widget.accuratePreviewRequested.connect(self.render_accurate_preview)
         layout.addWidget(self.preview_widget)
 
         self.summary_label = QLabel("Video: - | Subtitle count: 0")
@@ -1150,6 +1152,43 @@ class MainWindow(QMainWindow):
         self._load_selected_text_to_editor(cue.text)
         self._load_selected_style_to_controls(cue)
         self._selecting_from_playback = False
+
+    def render_accurate_preview(self, position_ms: int) -> None:
+        if not self.video_info:
+            self._show_error("Exact Preview", "Please select a video first.")
+            return
+        if not self.subtitle_doc:
+            self.parse_subtitles()
+        if not self.subtitle_doc:
+            return
+        if not self._sync_subtitles_from_table(show_errors=True):
+            return
+
+        position_seconds = max(0.0, position_ms / 1000.0)
+        self.preview_widget.accurate_preview_button.setEnabled(False)
+        self.log("Rendering exact preview frame with FFmpeg/libass...")
+        try:
+            png_bytes = render_accurate_preview_frame(
+                video_info=self.video_info,
+                cues=self.subtitle_doc.cues,
+                style=self.current_style(),
+                position_seconds=position_seconds,
+            )
+        except PreviewRenderError as exc:
+            self._show_error("Exact Preview Error", str(exc))
+            return
+        except Exception as exc:
+            self._show_error("Exact Preview Error", str(exc))
+            return
+        finally:
+            self.preview_widget.accurate_preview_button.setEnabled(True)
+
+        image = QImage.fromData(png_bytes, "PNG")
+        if image.isNull():
+            self._show_error("Exact Preview Error", "FFmpeg returned an unreadable preview frame.")
+            return
+        self.preview_widget.show_accurate_preview_image(image, position_ms)
+        self.log("Exact preview frame rendered. This frame uses the same FFmpeg/libass renderer as export.")
 
     def auto_cleanup_timings(self) -> None:
         if not self.video_info:

@@ -41,6 +41,7 @@ class VideoSubtitleCanvas(QWidget):
         self._force_selected_preview = False
         self._position_seconds = 0.0
         self._frame_image: QImage | None = None
+        self._frame_has_subtitles = False
         self._fit_mode = "fit"
         self._fit_margin_percent = 0
 
@@ -71,8 +72,9 @@ class VideoSubtitleCanvas(QWidget):
         self._position_seconds = max(0.0, seconds)
         self.update()
 
-    def set_frame_image(self, image: QImage) -> None:
+    def set_frame_image(self, image: QImage, *, has_subtitles: bool = False) -> None:
         self._frame_image = image.copy()
+        self._frame_has_subtitles = has_subtitles
         self.update()
 
     def set_fit_options(self, mode: str, margin_percent: int) -> None:
@@ -99,7 +101,7 @@ class VideoSubtitleCanvas(QWidget):
         painter.drawRect(video_rect.adjusted(0, 0, -1, -1))
 
         cue = self._active_cue()
-        if cue and self._video_info:
+        if cue and self._video_info and not self._frame_has_subtitles:
             self._draw_subtitle(painter, video_rect, cue)
         painter.end()
 
@@ -271,6 +273,7 @@ class SubtitlePreviewWidget(QWidget):
     """Real-time video preview using the same subtitle data that will be exported."""
 
     activeCueChanged = Signal(int)
+    accuratePreviewRequested = Signal(int)
 
     def __init__(self, parent: QWidget | None = None, *, allow_fullscreen: bool = True) -> None:
         super().__init__(parent)
@@ -301,6 +304,10 @@ class SubtitlePreviewWidget(QWidget):
         self.full_preview_button = QPushButton("Full Preview")
         self.full_preview_button.clicked.connect(self.open_full_preview)
         self.full_preview_button.setVisible(allow_fullscreen)
+
+        self.accurate_preview_button = QPushButton("Exact Frame")
+        self.accurate_preview_button.setToolTip("Render this frame with FFmpeg/libass, the same engine used by export.")
+        self.accurate_preview_button.clicked.connect(self.request_accurate_preview)
 
         self.fit_mode_combo = QComboBox()
         self.fit_mode_combo.addItem("Fit", "fit")
@@ -338,6 +345,7 @@ class SubtitlePreviewWidget(QWidget):
         controls.setContentsMargins(10, 6, 10, 6)
         controls.addWidget(self.play_button)
         controls.addWidget(self.full_preview_button)
+        controls.addWidget(self.accurate_preview_button)
         controls.addWidget(self.fit_mode_combo)
         controls.addWidget(self.fit_margin_spin)
         controls.addWidget(self.position_slider, 1)
@@ -389,6 +397,16 @@ class SubtitlePreviewWidget(QWidget):
         self.player.setPosition(milliseconds)
         self.canvas.set_position(milliseconds / 1000.0)
         self._update_time_label(milliseconds, self.player.duration())
+
+    def show_accurate_preview_image(self, image: QImage, milliseconds: int) -> None:
+        self.pause_playback()
+        self.player.setPosition(max(0, milliseconds))
+        self.canvas.set_frame_image(image, has_subtitles=True)
+        self._update_time_label(milliseconds, self.player.duration())
+
+    def request_accurate_preview(self) -> None:
+        self.pause_playback()
+        self.accuratePreviewRequested.emit(self.player.position())
 
     def toggle_playback(self) -> None:
         if self._play_requested:

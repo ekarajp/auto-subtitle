@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Iterable
 
-from core.ass_builder import wrap_subtitle_text
+from core.subtitle_layout import wrap_subtitle_text
 from core.style_preset import SubtitleStyle
 from core.subtitle_models import SubtitleCue
 from core.video_info import VideoInfo
