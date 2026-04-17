@@ -7,11 +7,9 @@ from PySide6.QtGui import QColor, QFont, QFontMetrics, QImage, QKeySequence, QPa
 from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer, QVideoSink
 from PySide6.QtWidgets import QComboBox, QDialog, QHBoxLayout, QLabel, QPushButton, QSlider, QSpinBox, QVBoxLayout, QWidget
 
-from core.ass_builder import wrap_subtitle_text
+from core.ass_builder import style_for_ass_export, subtitle_line_positions, wrap_subtitle_text
 from core.style_preset import (
     SubtitleStyle,
-    effective_bottom_margin,
-    effective_horizontal_margin,
     style_with_overrides,
 )
 from core.subtitle_models import SubtitleCue
@@ -135,64 +133,65 @@ class VideoSubtitleCanvas(QWidget):
 
     def _draw_subtitle(self, painter: QPainter, video_rect, cue: SubtitleCue) -> None:
         assert self._video_info is not None
-        style = style_with_overrides(self._style, cue.style_overrides)
-        scale = video_rect.height() / max(1, self._video_info.height)
-        lines = wrap_subtitle_text(cue.text, self._video_info, style, limit_lines=False)
-        margin_px = effective_bottom_margin(self._video_info, style) * scale
-        margin_x_px = effective_horizontal_margin(self._video_info, style) * scale
+        wrap_style = style_with_overrides(self._style, cue.style_overrides)
+        style = style_for_ass_export(wrap_style)
+        scale_x = video_rect.width() / max(1, self._video_info.width)
+        scale_y = video_rect.height() / max(1, self._video_info.height)
+        lines = wrap_subtitle_text(cue.text, self._video_info, wrap_style, limit_lines=False)
+        positions = subtitle_line_positions(self._video_info, style, len(lines))
 
-        font_size = max(10, round(style.font_size * scale))
-        font_size = self._fit_font_size(lines, style.font_family, font_size, max(40, video_rect.width() * style.max_width_percent / 100))
-        font = QFont(style.font_family, font_size)
+        font_size = max(1, round(style.font_size * scale_y))
+        font = QFont(style.font_family)
+        font.setPixelSize(font_size)
         painter.setFont(font)
 
-        line_height = painter.fontMetrics().height() + max(0, round(style.line_spacing * scale))
-        total_height = line_height * len(lines)
-        max_width = video_rect.width() * style.max_width_percent / 100
-        box_padding_x = max(8, round(font_size * 0.45))
-        box_padding_y = max(5, round(font_size * 0.24))
-
-        if style.text_position == "custom":
-            center_x = video_rect.left() + video_rect.width() * style.custom_x_percent / 100
-            center_y = video_rect.top() + video_rect.height() * style.custom_y_percent / 100
-            y = center_y - total_height / 2
-        elif style.alignment == "top_center":
-            center_x = video_rect.center().x()
-            y = video_rect.top() + margin_px
-        elif style.alignment == "center":
-            center_x = video_rect.center().x()
-            y = video_rect.center().y() - total_height / 2
-        else:
-            center_x = video_rect.center().x()
-            y = video_rect.bottom() - margin_px - total_height
-
-        if style.alignment.endswith("_left"):
-            center_x = video_rect.left() + margin_x_px + max_width / 2
-        elif style.alignment.endswith("_right"):
-            center_x = video_rect.right() - margin_x_px - max_width / 2
+        source_line_height = max(1, round(style.font_size * 1.18 + style.line_spacing))
+        line_height = source_line_height * scale_y
+        max_width = self._video_info.width * style.max_width_percent / 100
+        max_width_view = max_width * scale_x
+        box_padding_x = max(8, round(style.font_size * 0.45 * scale_x))
+        box_padding_y = max(5, round(style.font_size * 0.24 * scale_y))
 
         if style.background_enabled and lines:
             bg = QColor(style.background_color)
             bg.setAlpha(round(255 * style.background_opacity / 100))
             painter.setBrush(bg)
             painter.setPen(Qt.PenStyle.NoPen)
-            left = round(center_x - max_width / 2 - box_padding_x)
-            top = round(y - box_padding_y)
-            width = round(max_width + (box_padding_x * 2))
-            height = round(total_height + (box_padding_y * 2))
+            first_x, first_y, an = positions[0]
+            last_y = positions[min(len(positions), len(lines)) - 1][1]
+            first_x_view = video_rect.left() + first_x * scale_x
+            first_y_view = video_rect.top() + first_y * scale_y
+            last_y_view = video_rect.top() + last_y * scale_y
+            if an == 4:
+                left = round(first_x_view - box_padding_x)
+            elif an == 6:
+                left = round(first_x_view - max_width_view - box_padding_x)
+            else:
+                left = round(first_x_view - max_width_view / 2 - box_padding_x)
+            top = round(first_y_view - line_height / 2 - box_padding_y)
+            width = round(max_width_view + (box_padding_x * 2))
+            height = round((last_y_view - first_y_view) + line_height + (box_padding_y * 2))
             painter.drawRoundedRect(left, top, width, height, 6, 6)
 
-        for line in lines:
+        for line, (x, y, an) in zip(lines, positions):
+            x_view = video_rect.left() + x * scale_x
+            y_view = video_rect.top() + y * scale_y
+            if an == 4:
+                left = x_view
+            elif an == 6:
+                left = x_view - max_width_view
+            else:
+                left = x_view - max_width_view / 2
             text_rect = video_rect.__class__(
-                round(center_x - max_width / 2),
-                round(y),
-                round(max_width),
+                round(left),
+                round(y_view - line_height / 2),
+                round(max_width_view),
                 round(line_height),
             )
             if style.shadow_enabled and style.shadow_offset > 0:
                 shadow = QColor(style.shadow_color)
                 shadow.setAlpha(220)
-                offset = max(2, round(style.shadow_offset * scale))
+                offset = max(2, round(style.shadow_offset * scale_y))
                 blur_steps = max(1, min(4, round(style.shadow_blur)))
                 for step in range(blur_steps):
                     spread = step if blur_steps > 1 else 0
@@ -203,6 +202,7 @@ class VideoSubtitleCanvas(QWidget):
                         text_rect.translated(offset + spread, offset + spread),
                         line,
                         font,
+                        ass_alignment=an,
                         fill_color=shadow,
                         stroke_color=None,
                         stroke_width=0,
@@ -213,11 +213,11 @@ class VideoSubtitleCanvas(QWidget):
                 text_rect,
                 line,
                 font,
+                ass_alignment=an,
                 fill_color=QColor(style.font_color),
                 stroke_color=QColor(style.stroke_color) if style.stroke_enabled and style.stroke_width > 0 else None,
-                stroke_width=max(1, round(style.stroke_width * scale)) if style.stroke_enabled else 0,
+                stroke_width=max(1, round(style.stroke_width * scale_y)) if style.stroke_enabled else 0,
             )
-            y += line_height
 
     def _fit_font_size(self, lines: list[str], family: str, start_size: int, max_width: float) -> int:
         size = start_size
@@ -236,6 +236,7 @@ class VideoSubtitleCanvas(QWidget):
         text: str,
         font: QFont,
         *,
+        ass_alignment: int,
         fill_color: QColor,
         stroke_color: QColor | None,
         stroke_width: int,
@@ -243,7 +244,12 @@ class VideoSubtitleCanvas(QWidget):
         path = QPainterPath()
         metrics = QFontMetrics(font)
         text_width = metrics.horizontalAdvance(text)
-        x = text_rect.left() + (text_rect.width() - text_width) / 2
+        if ass_alignment == 4:
+            x = text_rect.left()
+        elif ass_alignment == 6:
+            x = text_rect.right() - text_width
+        else:
+            x = text_rect.left() + (text_rect.width() - text_width) / 2
         y = text_rect.top() + (text_rect.height() + metrics.ascent() - metrics.descent()) / 2
         path.addText(x, y, font, text)
         if stroke_color and stroke_width > 0:

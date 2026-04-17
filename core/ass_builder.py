@@ -15,17 +15,17 @@ from core.video_info import VideoInfo
 from utils.timecode import format_ass_time
 
 
-ASS_EXPORT_FONT_SCALE = 1.33
+ASS_EXPORT_FONT_SCALE = 1.45
 
 
 def build_ass_document(video_info: VideoInfo, cues: list[SubtitleCue], style: SubtitleStyle) -> str:
     """Build an ASS subtitle document ready for FFmpeg's ass filter."""
-    header = _build_header(video_info, _style_for_ass_export(style))
+    header = _build_header(video_info, style_for_ass_export(style))
     events = [_build_event_lines(video_info, cue, style) for cue in cues]
     return header + "\n".join(line for group in events for line in group) + "\n"
 
 
-def _style_for_ass_export(style: SubtitleStyle) -> SubtitleStyle:
+def style_for_ass_export(style: SubtitleStyle) -> SubtitleStyle:
     """ASS Fontsize renders smaller than Qt preview point sizes on Windows.
 
     The app exposes one font-size control to users, so export is scaled here to
@@ -80,11 +80,11 @@ def _build_header(video_info: VideoInfo, style: SubtitleStyle) -> str:
 
 def _build_event_lines(video_info: VideoInfo, cue: SubtitleCue, style: SubtitleStyle) -> list[str]:
     wrap_style = style_with_overrides(style, cue.style_overrides)
-    style = _style_for_ass_export(wrap_style)
+    style = style_for_ass_export(wrap_style)
     start = format_ass_time(cue.start)
     end = format_ass_time(cue.end)
     lines = wrap_subtitle_text(cue.text, video_info, wrap_style, limit_lines=False)
-    positions = _line_positions(video_info, style, len(lines))
+    positions = subtitle_line_positions(video_info, style, len(lines))
     blur_tag = f"\\blur{style.shadow_blur:.1f}" if style.shadow_blur > 0 else ""
 
     result: list[str] = []
@@ -137,25 +137,26 @@ def _build_background_box_event(
     return f"Dialogue: 0,{start},{end},Box,,0,0,0,,{{\\an7\\pos(0,0)\\p1}}{path}"
 
 
-def _line_positions(
+def subtitle_line_positions(
     video_info: VideoInfo, style: SubtitleStyle, line_count: int
 ) -> list[tuple[int, int, int]]:
     line_count = max(1, line_count)
     margin = effective_bottom_margin(video_info, style)
     safe_x = effective_horizontal_margin(video_info, style)
     line_height = max(1, round(style.font_size * 1.18 + style.line_spacing))
+    block_height = line_height * line_count
 
     if style.text_position == "custom":
         base_x = round(video_info.width * style.custom_x_percent / 100)
         base_y = round(video_info.height * style.custom_y_percent / 100)
-        y_start = base_y - round((line_count - 1) * line_height / 2)
+        block_top = base_y - (block_height / 2)
     else:
         if style.alignment == "top_center":
-            y_start = margin
+            block_top = margin
         elif style.alignment == "center":
-            y_start = round(video_info.height / 2 - ((line_count - 1) * line_height / 2))
+            block_top = (video_info.height / 2) - (block_height / 2)
         else:
-            y_start = video_info.height - margin - ((line_count - 1) * line_height)
+            block_top = video_info.height - margin - block_height
 
         if style.alignment.endswith("_left"):
             base_x = safe_x
@@ -172,7 +173,7 @@ def _line_positions(
 
     positions = []
     for idx in range(line_count):
-        y = max(8, min(video_info.height - 8, y_start + (idx * line_height)))
+        y = max(8, min(video_info.height - 8, block_top + (idx * line_height) + (line_height / 2)))
         x = max(8, min(video_info.width - 8, base_x))
         positions.append((round(x), round(y), ass_alignment))
     return positions
