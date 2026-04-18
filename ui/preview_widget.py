@@ -2,10 +2,23 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import QPointF, QSignalBlocker, QUrl, Qt, Signal
+from PySide6.QtCore import QPointF, QSignalBlocker, QSize, QTimer, QUrl, Qt, Signal
 from PySide6.QtGui import QColor, QFont, QFontMetrics, QImage, QKeySequence, QPainter, QPen, QShortcut
 from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer, QVideoSink
-from PySide6.QtWidgets import QComboBox, QDialog, QHBoxLayout, QLabel, QPushButton, QSlider, QSpinBox, QVBoxLayout, QWidget
+from PySide6.QtWidgets import (
+    QComboBox,
+    QDialog,
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QScrollArea,
+    QSizePolicy,
+    QSlider,
+    QSpinBox,
+    QVBoxLayout,
+    QWidget,
+)
 
 from core.subtitle_layout import (
     preview_baseline_shift,
@@ -26,6 +39,20 @@ from core.video_info import VideoInfo
 from utils.timecode import format_timecode
 
 
+ZOOM_PRESETS: tuple[tuple[str, str | float], ...] = (
+    ("Fit", "fit"),
+    ("10%", 0.10),
+    ("20%", 0.20),
+    ("25%", 0.25),
+    ("50%", 0.50),
+    ("75%", 0.75),
+    ("100%", 1.00),
+    ("125%", 1.25),
+    ("150%", 1.50),
+    ("200%", 2.00),
+)
+
+
 class VideoSubtitleCanvas(QWidget):
     """Paints the current video frame and subtitle in one widget.
 
@@ -35,7 +62,7 @@ class VideoSubtitleCanvas(QWidget):
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.setMinimumHeight(220)
+        self.setMinimumSize(1, 1)
         self.setAutoFillBackground(False)
         self._video_info: VideoInfo | None = None
         self._style = SubtitleStyle()
@@ -46,8 +73,6 @@ class VideoSubtitleCanvas(QWidget):
         self._frame_image: QImage | None = None
         self._frame_has_subtitles = False
         self._source_has_subtitles = False
-        self._fit_mode = "fit"
-        self._fit_margin_percent = 0
 
     def set_video_info(self, info: VideoInfo | None) -> None:
         self._video_info = info
@@ -83,11 +108,6 @@ class VideoSubtitleCanvas(QWidget):
     def set_frame_image(self, image: QImage, *, has_subtitles: bool = False) -> None:
         self._frame_image = image.copy()
         self._frame_has_subtitles = has_subtitles
-        self.update()
-
-    def set_fit_options(self, mode: str, margin_percent: int) -> None:
-        self._fit_mode = mode
-        self._fit_margin_percent = max(0, min(30, int(margin_percent)))
         self.update()
 
     def paintEvent(self, event) -> None:  # noqa: N802 - Qt override
@@ -127,12 +147,6 @@ class VideoSubtitleCanvas(QWidget):
 
     def _video_rect(self):
         available = self.rect()
-        if self._fit_mode == "fit_margin" and self._fit_margin_percent > 0:
-            margin_x = round(available.width() * self._fit_margin_percent / 100)
-            margin_y = round(available.height() * self._fit_margin_percent / 100)
-            available = available.adjusted(margin_x, margin_y, -margin_x, -margin_y)
-            if available.width() <= 20 or available.height() <= 20:
-                available = self.rect()
         if not self._video_info:
             ratio = 16 / 9
         else:
@@ -291,6 +305,198 @@ class VideoSubtitleCanvas(QWidget):
         painter.drawText(QPointF(x, y), text)
 
 
+class PreviewScrollArea(QScrollArea):
+    """Scroll area that reports viewport changes and Ctrl+Wheel zoom gestures."""
+
+    viewportResized = Signal()
+    zoomStepRequested = Signal(int)
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setObjectName("PreviewScrollArea")
+        self.setWidgetResizable(False)
+        self.setFrameShape(QFrame.Shape.NoFrame)
+        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+
+    def resizeEvent(self, event) -> None:  # noqa: N802 - Qt override
+        super().resizeEvent(event)
+        self.viewportResized.emit()
+
+    def wheelEvent(self, event) -> None:  # noqa: N802 - Qt override
+        if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
+            delta = event.angleDelta().y()
+            if delta:
+                self.zoomStepRequested.emit(1 if delta > 0 else -1)
+                event.accept()
+                return
+        super().wheelEvent(event)
+
+
+class PreviewCanvasContainer(QWidget):
+    """Hosts the preview canvas and keeps it centered inside the scroll viewport."""
+
+    def __init__(self, canvas: VideoSubtitleCanvas, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setObjectName("PreviewCanvasContainer")
+        self.canvas = canvas
+        self.canvas.setParent(self)
+        self._content_size = QSize(640, 360)
+        self._viewport_size = QSize(640, 360)
+        self._update_geometry()
+
+    def set_content_size(self, size: QSize) -> None:
+        self._content_size = QSize(max(1, size.width()), max(1, size.height()))
+        self._update_geometry()
+
+    def set_viewport_size(self, size: QSize) -> None:
+        self._viewport_size = QSize(max(1, size.width()), max(1, size.height()))
+        self._update_geometry()
+
+    def _update_geometry(self) -> None:
+        holder_width = max(self._viewport_size.width(), self._content_size.width())
+        holder_height = max(self._viewport_size.height(), self._content_size.height())
+        self.setFixedSize(holder_width, holder_height)
+        self.canvas.setFixedSize(self._content_size)
+        x = max(0, (holder_width - self._content_size.width()) // 2)
+        y = max(0, (holder_height - self._content_size.height()) // 2)
+        self.canvas.move(x, y)
+        self.canvas.updateGeometry()
+        self.updateGeometry()
+
+
+class PreviewViewport(QWidget):
+    """Professional preview viewport with real zoom, centering, and scroll overflow."""
+
+    zoomStepRequested = Signal(int)
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._video_info: VideoInfo | None = None
+        self._zoom_value: str | float = "fit"
+        self._current_scale = 1.0
+        self._view_margin_percent = 0
+        self._scroll_sync_pending = False
+
+        self.canvas = VideoSubtitleCanvas()
+        self.container = PreviewCanvasContainer(self.canvas)
+        self.scroll_area = PreviewScrollArea()
+        self.scroll_area.setWidget(self.container)
+        self.scroll_area.viewportResized.connect(self._viewport_resized)
+        self.scroll_area.zoomStepRequested.connect(self.zoomStepRequested)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        layout.addWidget(self.scroll_area)
+        self.update_preview_scale()
+
+    def set_video_info(self, info: VideoInfo | None) -> None:
+        self._video_info = info
+        self.canvas.set_video_info(info)
+        self.update_preview_scale()
+
+    def set_zoom(self, value: str | float) -> None:
+        self._zoom_value = value
+        self.update_preview_scale()
+
+    def set_view_margin(self, percent: int) -> None:
+        self._view_margin_percent = max(0, min(30, int(percent)))
+        self.update_preview_scale()
+
+    def current_scale(self) -> float:
+        return self._current_scale
+
+    def fit_to_view(self) -> None:
+        self._current_scale = self._fit_scale()
+        self.container.set_viewport_size(self.scroll_area.viewport().size())
+        self.container.set_content_size(self.get_scaled_preview_size())
+
+    def update_preview_scale(self) -> None:
+        h_bar = self.scroll_area.horizontalScrollBar()
+        v_bar = self.scroll_area.verticalScrollBar()
+        old_h_ratio = self._scroll_center_ratio(h_bar)
+        old_v_ratio = self._scroll_center_ratio(v_bar)
+
+        if self._zoom_value == "fit":
+            self.fit_to_view()
+        else:
+            self._current_scale = max(0.01, float(self._zoom_value))
+            self.container.set_viewport_size(self.scroll_area.viewport().size())
+            self.container.set_content_size(self.get_scaled_preview_size())
+
+        self._restore_scroll_center(h_bar, old_h_ratio)
+        self._restore_scroll_center(v_bar, old_v_ratio)
+        self._queue_scroll_range_sync()
+
+    def get_scaled_preview_size(self) -> QSize:
+        base_width, base_height = self._base_video_size()
+        return QSize(
+            max(1, round(base_width * self._current_scale)),
+            max(1, round(base_height * self._current_scale)),
+        )
+
+    def _viewport_resized(self) -> None:
+        self.container.set_viewport_size(self.scroll_area.viewport().size())
+        if self._zoom_value == "fit":
+            self.update_preview_scale()
+        else:
+            self.container.set_content_size(self.get_scaled_preview_size())
+            self._queue_scroll_range_sync()
+
+    def _queue_scroll_range_sync(self) -> None:
+        if self._scroll_sync_pending:
+            return
+        self._scroll_sync_pending = True
+        QTimer.singleShot(0, self._sync_scroll_ranges_after_layout)
+
+    def _sync_scroll_ranges_after_layout(self) -> None:
+        self._scroll_sync_pending = False
+        if not self.scroll_area.viewport().size().isValid():
+            return
+
+        h_bar = self.scroll_area.horizontalScrollBar()
+        v_bar = self.scroll_area.verticalScrollBar()
+        old_h_ratio = self._scroll_center_ratio(h_bar)
+        old_v_ratio = self._scroll_center_ratio(v_bar)
+
+        if self._zoom_value == "fit":
+            self._current_scale = self._fit_scale()
+
+        self.container.set_viewport_size(self.scroll_area.viewport().size())
+        self.container.set_content_size(self.get_scaled_preview_size())
+        self._restore_scroll_center(h_bar, old_h_ratio)
+        self._restore_scroll_center(v_bar, old_v_ratio)
+
+    def _base_video_size(self) -> tuple[int, int]:
+        if self._video_info:
+            return max(1, self._video_info.width), max(1, self._video_info.height)
+        return 1280, 720
+
+    def _fit_scale(self) -> float:
+        base_width, base_height = self._base_video_size()
+        viewport = self.scroll_area.viewport().size()
+        width = max(1, viewport.width())
+        height = max(1, viewport.height())
+        if self._view_margin_percent:
+            margin_factor = max(0.10, 1.0 - (self._view_margin_percent / 100.0 * 2.0))
+            width = max(1, round(width * margin_factor))
+            height = max(1, round(height * margin_factor))
+        return max(0.01, min(width / base_width, height / base_height))
+
+    def _scroll_center_ratio(self, scroll_bar) -> float:
+        page = max(1, scroll_bar.pageStep())
+        total = max(1, scroll_bar.maximum() + page)
+        return (scroll_bar.value() + page / 2) / total
+
+    def _restore_scroll_center(self, scroll_bar, ratio: float) -> None:
+        page = max(1, scroll_bar.pageStep())
+        total = max(1, scroll_bar.maximum() + page)
+        value = round(total * ratio - page / 2)
+        scroll_bar.setValue(max(scroll_bar.minimum(), min(scroll_bar.maximum(), value)))
+
+
 class SubtitlePreviewWidget(QWidget):
     """Real-time video preview using the same subtitle data that will be exported."""
 
@@ -301,6 +507,8 @@ class SubtitlePreviewWidget(QWidget):
     def __init__(self, parent: QWidget | None = None, *, allow_fullscreen: bool = True) -> None:
         super().__init__(parent)
         self.setMinimumHeight(280)
+        self.setMinimumWidth(0)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self._video_info: VideoInfo | None = None
         self._video_path: Path | None = None
         self._original_video_path: Path | None = None
@@ -321,57 +529,66 @@ class SubtitlePreviewWidget(QWidget):
         self.video_sink.videoFrameChanged.connect(self._video_frame_changed)
         self.player.setVideoSink(self.video_sink)
 
-        self.canvas = VideoSubtitleCanvas()
+        self.preview_view = PreviewViewport()
+        self.preview_view.zoomStepRequested.connect(self._step_zoom)
+        self.canvas = self.preview_view.canvas
 
         self.play_button = QPushButton("Play")
+        self.play_button.setProperty("variant", "preview")
         self.play_button.clicked.connect(self.toggle_playback)
 
-        self.full_preview_button = QPushButton("Full Preview")
+        self.full_preview_button = QPushButton("Full")
+        self.full_preview_button.setProperty("variant", "preview")
+        self.full_preview_button.setToolTip("Open full preview")
         self.full_preview_button.clicked.connect(self.open_full_preview)
         self.full_preview_button.setVisible(allow_fullscreen)
 
-        self.accurate_preview_button = QPushButton("Exact Frame")
+        self.accurate_preview_button = QPushButton("Frame")
+        self.accurate_preview_button.setProperty("variant", "preview")
         self.accurate_preview_button.setToolTip("Render this frame with FFmpeg/libass, the same engine used by export.")
         self.accurate_preview_button.clicked.connect(self.request_accurate_preview)
 
-        self.accurate_video_button = QPushButton("Render Preview")
+        self.accurate_video_button = QPushButton("Render")
+        self.accurate_video_button.setProperty("variant", "preview")
         self.accurate_video_button.setToolTip("Render a temporary preview video with FFmpeg/libass, then play it here.")
         self.accurate_video_button.clicked.connect(self.request_accurate_video)
+        for button in (
+            self.play_button,
+            self.full_preview_button,
+            self.accurate_preview_button,
+            self.accurate_video_button,
+        ):
+            button.setMinimumWidth(0)
+            button.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
 
-        self.fit_mode_combo = QComboBox()
-        self.fit_mode_combo.addItem("Fit", "fit")
-        self.fit_mode_combo.addItem("Fit Margin", "fit_margin")
-        self.fit_mode_combo.currentIndexChanged.connect(self._fit_options_changed)
+        self.zoom_combo = QComboBox()
+        for label, value in ZOOM_PRESETS:
+            self.zoom_combo.addItem(label, value)
+        self.zoom_combo.setMinimumWidth(62)
+        self.zoom_combo.setMaximumWidth(86)
+        self.zoom_combo.setToolTip("Preview zoom. 100% shows the video at native preview pixels.")
+        self.zoom_combo.currentIndexChanged.connect(self._zoom_changed)
 
         self.fit_margin_spin = QSpinBox()
         self.fit_margin_spin.setRange(0, 30)
         self.fit_margin_spin.setValue(6)
         self.fit_margin_spin.setSuffix("%")
-        self.fit_margin_spin.setToolTip("Preview margin only. Export uses the subtitle safe-area settings.")
-        self.fit_margin_spin.valueChanged.connect(self._fit_options_changed)
+        self.fit_margin_spin.setMinimumWidth(58)
+        self.fit_margin_spin.setMaximumWidth(76)
+        self.fit_margin_spin.setToolTip("Fit-mode viewport margin only. Export uses the subtitle safe-area settings.")
+        self.fit_margin_spin.valueChanged.connect(self._view_margin_changed)
 
         self.position_slider = QSlider(Qt.Orientation.Horizontal)
         self.position_slider.setRange(0, 0)
         self.position_slider.sliderMoved.connect(self.seek_to)
 
         self.time_label = QLabel("00:00:00.000 / 00:00:00.000")
-        self.time_label.setMinimumWidth(190)
+        self.time_label.setMinimumWidth(138)
         self.time_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
 
         self.controls_bar = QWidget()
         self.controls_bar.setObjectName("PreviewControlsBar")
-        self.controls_bar.setMinimumHeight(84)
-        self.controls_bar.setStyleSheet(
-            "QWidget#PreviewControlsBar { background: #111820; border-top: 1px solid #34404C; } "
-            "QPushButton { background: #F3F6FA; color: #111820; border: 1px solid #7E8A98; "
-            "border-radius: 6px; min-height: 30px; padding: 4px 12px; font-weight: 600; } "
-            "QPushButton:hover { background: #DCEBFF; } "
-            "QComboBox, QSpinBox { background: #FFFFFF; color: #111820; border: 1px solid #7E8A98; "
-            "border-radius: 6px; padding: 3px 6px; min-height: 28px; } "
-            "QSlider::groove:horizontal { height: 6px; background: #C9D2DC; border-radius: 3px; } "
-            "QSlider::handle:horizontal { background: #2B83D3; width: 16px; margin: -5px 0; border-radius: 8px; } "
-            "QLabel { color: #F3F6FA; }"
-        )
+        self.controls_bar.setMinimumHeight(108)
         controls = QVBoxLayout(self.controls_bar)
         controls.setContentsMargins(10, 6, 10, 8)
         controls.setSpacing(6)
@@ -383,8 +600,14 @@ class SubtitlePreviewWidget(QWidget):
         button_row.addWidget(self.accurate_preview_button)
         button_row.addWidget(self.accurate_video_button)
         button_row.addStretch(1)
-        button_row.addWidget(self.fit_mode_combo)
-        button_row.addWidget(self.fit_margin_spin)
+
+        zoom_row = QHBoxLayout()
+        zoom_row.setSpacing(8)
+        zoom_row.addStretch(1)
+        zoom_row.addWidget(QLabel("Zoom"))
+        zoom_row.addWidget(self.zoom_combo)
+        zoom_row.addWidget(QLabel("Margin"))
+        zoom_row.addWidget(self.fit_margin_spin)
 
         slider_row = QHBoxLayout()
         slider_row.setSpacing(10)
@@ -392,21 +615,23 @@ class SubtitlePreviewWidget(QWidget):
         slider_row.addWidget(self.time_label)
 
         controls.addLayout(button_row)
+        controls.addLayout(zoom_row)
         controls.addLayout(slider_row)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
-        layout.addWidget(self.canvas, 1)
+        layout.addWidget(self.preview_view, 1)
         layout.addWidget(self.controls_bar)
 
         self.player.positionChanged.connect(self._position_changed)
         self.player.durationChanged.connect(self._duration_changed)
         self.player.playbackStateChanged.connect(self._playback_state_changed)
+        self.preview_view.set_view_margin(int(self.fit_margin_spin.value()))
 
     def set_video_info(self, info: VideoInfo | None) -> None:
         self._video_info = info
-        self.canvas.set_video_info(info)
+        self.preview_view.set_video_info(info)
 
     def set_video_path(self, path: str | Path, *, source_has_subtitles: bool = False) -> None:
         self._video_path = Path(path).resolve()
@@ -504,11 +729,7 @@ class SubtitlePreviewWidget(QWidget):
         preview.set_style(self._style)
         preview.set_cues(self._cues)
         preview.set_video_path(self._video_path)
-        preview.canvas.set_fit_options(
-            str(self.fit_mode_combo.currentData()),
-            int(self.fit_margin_spin.value()),
-        )
-        preview.fit_mode_combo.setCurrentIndex(self.fit_mode_combo.currentIndex())
+        preview._set_zoom_combo_data(self.zoom_combo.currentData())
         preview.fit_margin_spin.setValue(self.fit_margin_spin.value())
         preview.seek_to(current_position)
         preview.controls_bar.setMinimumHeight(92)
@@ -516,8 +737,12 @@ class SubtitlePreviewWidget(QWidget):
 
         def sync_back_from_full_preview() -> None:
             position = preview.player.position()
+            zoom_value = preview.zoom_combo.currentData()
+            margin_value = preview.fit_margin_spin.value()
             preview.pause_playback()
             preview.player.stop()
+            self._set_zoom_combo_data(zoom_value)
+            self.fit_margin_spin.setValue(margin_value)
             self.seek_to(position)
 
         QShortcut(QKeySequence(Qt.Key.Key_Escape), dialog, dialog.close)
@@ -565,9 +790,42 @@ class SubtitlePreviewWidget(QWidget):
             f"{format_timecode(position / 1000.0)} / {format_timecode(duration / 1000.0)}"
         )
 
-    def _fit_options_changed(self, *args) -> None:
+    def _zoom_changed(self, *args) -> None:
         del args
-        self.canvas.set_fit_options(str(self.fit_mode_combo.currentData()), int(self.fit_margin_spin.value()))
+        self.preview_view.set_zoom(self.zoom_combo.currentData())
+
+    def _view_margin_changed(self, *args) -> None:
+        del args
+        self.preview_view.set_view_margin(int(self.fit_margin_spin.value()))
+
+    def _step_zoom(self, direction: int) -> None:
+        if direction == 0:
+            return
+        current_scale = self.preview_view.current_scale()
+        numeric_presets = [
+            (index, float(value))
+            for index, (_label, value) in enumerate(ZOOM_PRESETS)
+            if value != "fit"
+        ]
+        target_index = self.zoom_combo.currentIndex()
+        if direction > 0:
+            for index, scale in numeric_presets:
+                if scale > current_scale + 0.001:
+                    target_index = index
+                    break
+            else:
+                target_index = numeric_presets[-1][0]
+        else:
+            lower = [index for index, scale in numeric_presets if scale < current_scale - 0.001]
+            target_index = lower[-1] if lower else 0
+        self.zoom_combo.setCurrentIndex(target_index)
+
+    def _set_zoom_combo_data(self, value: str | float) -> None:
+        for index in range(self.zoom_combo.count()):
+            data = self.zoom_combo.itemData(index)
+            if data == value or (data != "fit" and value != "fit" and abs(float(data) - float(value)) < 0.001):
+                self.zoom_combo.setCurrentIndex(index)
+                return
 
     def _active_cue_index(self, seconds: float) -> int:
         for cue in self._cues:

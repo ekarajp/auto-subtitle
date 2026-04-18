@@ -3,8 +3,8 @@ from __future__ import annotations
 import tempfile
 from pathlib import Path
 
-from PySide6.QtCore import QLocale, QSignalBlocker, Qt, QThread
-from PySide6.QtGui import QAction, QColor, QFont, QFontDatabase, QFontMetrics, QImage, QKeySequence
+from PySide6.QtCore import QLocale, QSettings, QSignalBlocker, Qt, QThread, Signal
+from PySide6.QtGui import QAction, QColor, QFont, QFontDatabase, QFontMetrics, QImage, QKeySequence, QPainter, QPen
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
     QDoubleSpinBox,
     QFileDialog,
     QFormLayout,
+    QFrame,
     QGridLayout,
     QGroupBox,
     QHBoxLayout,
@@ -27,11 +28,13 @@ from PySide6.QtWidgets import (
     QRadioButton,
     QProgressBar,
     QScrollArea,
+    QSizePolicy,
     QSpinBox,
     QSplitter,
     QTableWidget,
     QTableWidgetItem,
     QTextEdit,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -75,13 +78,133 @@ PREFERRED_FONTS = [
     "Angsana New",
     "Georgia",
 ]
+COLLAPSIBLE_SECTION_KEYS = (
+    "videoInput",
+    "subtitleInput",
+    "globalSubtitleStyle",
+    "output",
+    "selectedSubtitleManualStyle",
+)
+COLLAPSIBLE_DEFAULTS_VERSION = 2
+
+
+class CenterResizeBar(QWidget):
+    """Visible drag bar that changes Preview height inside the scrollable workspace."""
+
+    dragStarted = Signal()
+    dragMoved = Signal(int)
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setObjectName("CenterResizeBar")
+        self.setCursor(Qt.CursorShape.SplitVCursor)
+        self.setFixedHeight(18)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self._drag_start_y: int | None = None
+
+    def paintEvent(self, event) -> None:  # noqa: N802 - Qt override
+        del event
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        rect = self.rect()
+        painter.fillRect(rect, QColor("#D2DEEA"))
+
+        y = rect.center().y()
+        painter.setPen(QPen(QColor("#8297AD"), 1))
+        painter.drawLine(0, y - 7, rect.width(), y - 7)
+        painter.drawLine(0, y + 7, rect.width(), y + 7)
+
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor("#5F738A"))
+        center_x = rect.center().x()
+        for offset in (-30, -18, -6, 6, 18, 30):
+            painter.drawRoundedRect(center_x + offset - 2, y - 2, 4, 4, 2, 2)
+        painter.end()
+
+    def mousePressEvent(self, event) -> None:  # noqa: N802 - Qt override
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._drag_start_y = round(event.globalPosition().y())
+            self.dragStarted.emit()
+            event.accept()
+            return
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event) -> None:  # noqa: N802 - Qt override
+        if self._drag_start_y is not None:
+            self.dragMoved.emit(round(event.globalPosition().y()) - self._drag_start_y)
+            event.accept()
+            return
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event) -> None:  # noqa: N802 - Qt override
+        self._drag_start_y = None
+        super().mouseReleaseEvent(event)
+
+
+class CollapsibleSection(QFrame):
+    """Reusable settings panel that releases its content space when collapsed."""
+
+    toggled = Signal(bool)
+
+    def __init__(self, title: str, content: QWidget, *, expanded: bool = True, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setObjectName("CollapsibleSection")
+        self.setFrameShape(QFrame.Shape.NoFrame)
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+
+        self.header_button = QToolButton()
+        self.header_button.setObjectName("CollapsibleHeader")
+        self.header_button.setAutoRaise(False)
+        self.header_button.setCheckable(True)
+        self.header_button.setChecked(expanded)
+        self.header_button.setText(title)
+        self.header_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.header_button.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.header_button.clicked.connect(self.set_expanded)
+
+        self.body = QWidget()
+        self.body.setObjectName("CollapsibleBody")
+        self.body.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self.body.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        content.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        body_layout = QVBoxLayout(self.body)
+        body_layout.setContentsMargins(14, 10, 14, 14)
+        body_layout.setSpacing(0)
+        body_layout.addWidget(content)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        layout.addWidget(self.header_button)
+        layout.addWidget(self.body)
+
+        self.set_expanded(expanded, emit_signal=False)
+
+    def is_expanded(self) -> bool:
+        return not self.body.isHidden()
+
+    def set_expanded(self, expanded: bool, *, emit_signal: bool = True) -> None:
+        expanded = bool(expanded)
+        with QSignalBlocker(self.header_button):
+            self.header_button.setChecked(expanded)
+        self.header_button.setArrowType(Qt.ArrowType.DownArrow if expanded else Qt.ArrowType.RightArrow)
+        self.body.setVisible(expanded)
+        self.setProperty("expanded", expanded)
+        self.style().unpolish(self)
+        self.style().polish(self)
+        self.adjustSize()
+        self.updateGeometry()
+        if emit_signal:
+            self.toggled.emit(expanded)
 
 
 class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle("Smart Subtitle")
-        self.setMinimumSize(1080, 720)
+        self.setMinimumSize(1180, 760)
+        self.resize(1440, 900)
 
         self.video_info: VideoInfo | None = None
         self.subtitle_doc: SubtitleDocument | None = None
@@ -99,13 +222,32 @@ class MainWindow(QMainWindow):
         self._restoring_history = False
         self._history: list[list[tuple[float, float, str, dict[str, object]]]] = []
         self._history_index = -1
+        self.settings = QSettings("SmartSubtitle", "SmartSubtitle")
+        self._layout_restored = False
+        self._focus_preview_active = False
+        self._pre_focus_visibility: tuple[bool, bool, bool] | None = None
+        self._pre_focus_layout: tuple[list[int], int, int, bool] | None = None
+        self._preview_target_height = 560
+        self._preview_resize_start_height = self._preview_target_height
+        self._preview_height_user_set = False
 
+        self._migrate_collapsible_section_defaults()
         self._build_actions()
         self._build_ui()
         self._force_arabic_digit_locale()
         self._connect_style_signals()
         self._load_style_to_controls(SubtitleStyle())
         self._apply_light_stylesheet()
+        self._restore_workspace_layout()
+
+    def _migrate_collapsible_section_defaults(self) -> None:
+        version = int(self.settings.value("sections/defaultsVersion", 0))
+        if version >= COLLAPSIBLE_DEFAULTS_VERSION:
+            return
+        for key in COLLAPSIBLE_SECTION_KEYS:
+            self.settings.setValue(f"sections/{key}Expanded", True)
+        self.settings.setValue("sections/defaultsVersion", COLLAPSIBLE_DEFAULTS_VERSION)
+        self.settings.sync()
 
     def _build_actions(self) -> None:
         file_menu = self.menuBar().addMenu("&File")
@@ -117,6 +259,33 @@ class MainWindow(QMainWindow):
         save_action = QAction("Save Project Config...", self)
         save_action.triggered.connect(self.save_project_config)
         file_menu.addAction(save_action)
+
+        view_menu = self.menuBar().addMenu("&View")
+
+        self.toggle_left_panel_action = QAction("Toggle Left Panel", self)
+        self.toggle_left_panel_action.setCheckable(True)
+        self.toggle_left_panel_action.setChecked(True)
+        self.toggle_left_panel_action.setShortcut(QKeySequence("Ctrl+1"))
+        self.toggle_left_panel_action.triggered.connect(self.toggle_left_panel)
+        view_menu.addAction(self.toggle_left_panel_action)
+
+        self.toggle_right_panel_action = QAction("Toggle Right Panel", self)
+        self.toggle_right_panel_action.setCheckable(True)
+        self.toggle_right_panel_action.setChecked(True)
+        self.toggle_right_panel_action.setShortcut(QKeySequence("Ctrl+2"))
+        self.toggle_right_panel_action.triggered.connect(self.toggle_right_panel)
+        view_menu.addAction(self.toggle_right_panel_action)
+
+        self.focus_preview_action = QAction("Toggle Focus Preview", self)
+        self.focus_preview_action.setCheckable(True)
+        self.focus_preview_action.setShortcut(QKeySequence("Ctrl+`"))
+        self.focus_preview_action.triggered.connect(self.toggle_focus_preview)
+        view_menu.addAction(self.focus_preview_action)
+
+        self.reset_layout_action = QAction("Reset Layout", self)
+        self.reset_layout_action.setShortcut(QKeySequence("Ctrl+Alt+0"))
+        self.reset_layout_action.triggered.connect(self.reset_workspace_layout)
+        view_menu.addAction(self.reset_layout_action)
 
         edit_menu = self.menuBar().addMenu("&Edit")
 
@@ -204,44 +373,436 @@ class MainWindow(QMainWindow):
 
     def _build_ui(self) -> None:
         root = QWidget()
+        root.setObjectName("AppRoot")
         self.setCentralWidget(root)
         root_layout = QVBoxLayout(root)
+        root_layout.setContentsMargins(0, 0, 0, 0)
+        root_layout.setSpacing(0)
 
-        splitter = QSplitter(Qt.Orientation.Horizontal)
-        root_layout.addWidget(splitter, 1)
+        root_layout.addWidget(self._build_header())
 
-        left_scroll = QScrollArea()
-        left_scroll.setWidgetResizable(True)
-        left_scroll.setMinimumWidth(560)
-        left_content = QWidget()
-        left_scroll.setWidget(left_content)
-        left_layout = QVBoxLayout(left_content)
+        self.workspace_splitter = QSplitter(Qt.Orientation.Horizontal)
+        self.workspace_splitter.setObjectName("WorkspaceSplitter")
+        self.workspace_splitter.setChildrenCollapsible(True)
+        self.workspace_splitter.setHandleWidth(10)
+        root_layout.addWidget(self.workspace_splitter, 1)
 
-        left_layout.addWidget(self._build_video_group())
-        left_layout.addWidget(self._build_subtitle_group())
-        left_layout.addWidget(self._build_style_group())
-        left_layout.addStretch(1)
+        self.left_panel = self._build_setup_sidebar()
+        self.center_panel = self._build_center_workspace()
+        self.right_panel = self._build_inspector_panel()
+        self.workspace_splitter.addWidget(self.left_panel)
+        self.workspace_splitter.addWidget(self.center_panel)
+        self.workspace_splitter.addWidget(self.right_panel)
+        self.workspace_splitter.setStretchFactor(0, 0)
+        self.workspace_splitter.setStretchFactor(1, 1)
+        self.workspace_splitter.setStretchFactor(2, 0)
+        self._apply_default_workspace_sizes()
+        self.workspace_splitter.splitterMoved.connect(lambda *_args: self._save_workspace_layout())
 
-        right_panel = QWidget()
-        right_panel.setMinimumWidth(480)
-        right_layout = QVBoxLayout(right_panel)
-        right_splitter = QSplitter(Qt.Orientation.Vertical)
-        right_splitter.addWidget(self._build_preview_group())
-        right_splitter.addWidget(self._build_output_group())
-        right_splitter.setStretchFactor(0, 3)
-        right_splitter.setStretchFactor(1, 2)
-        right_splitter.setSizes([430, 260])
-        right_layout.addWidget(right_splitter, 1)
+    def _build_header(self) -> QWidget:
+        header = QWidget()
+        header.setObjectName("TopHeader")
+        layout = QHBoxLayout(header)
+        layout.setContentsMargins(22, 14, 22, 14)
+        layout.setSpacing(18)
 
-        splitter.addWidget(left_scroll)
-        splitter.addWidget(right_panel)
-        splitter.setStretchFactor(0, 1)
-        splitter.setStretchFactor(1, 1)
-        splitter.setSizes([580, 500])
+        title_block = QVBoxLayout()
+        title_block.setSpacing(2)
+        title = QLabel("Smart Subtitle")
+        title.setObjectName("AppTitle")
+        subtitle = QLabel("Professional subtitle timing, styling, preview, and FFmpeg export")
+        subtitle.setObjectName("AppSubtitle")
+        title_block.addWidget(title)
+        title_block.addWidget(subtitle)
 
-    def _build_video_group(self) -> QGroupBox:
-        group = QGroupBox("1. Video Input")
-        layout = QVBoxLayout(group)
+        self.header_status_label = QLabel("No project loaded")
+        self.header_status_label.setObjectName("HeaderStatus")
+        self.header_status_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.header_status_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+
+        layout_buttons = QHBoxLayout()
+        layout_buttons.setSpacing(8)
+        for action, text in [
+            (self.toggle_left_panel_action, "Left"),
+            (self.toggle_right_panel_action, "Right"),
+            (self.focus_preview_action, "Focus Preview"),
+            (self.reset_layout_action, "Reset"),
+        ]:
+            button = QPushButton(text)
+            button.setProperty("variant", "secondary")
+            button.setToolTip(action.text())
+            button.clicked.connect(action.trigger)
+            layout_buttons.addWidget(button)
+
+        layout.addLayout(title_block, 1)
+        layout.addWidget(self.header_status_label, 1)
+        layout.addLayout(layout_buttons)
+        return header
+
+    def _build_setup_sidebar(self) -> QScrollArea:
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setMinimumWidth(300)
+        scroll.setMaximumWidth(470)
+
+        content = QWidget()
+        content.setObjectName("SidebarContent")
+        layout = QVBoxLayout(content)
+        layout.setContentsMargins(16, 16, 12, 16)
+        layout.setSpacing(14)
+        layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+
+        layout.addWidget(self._build_video_group())
+        layout.addWidget(self._build_subtitle_group())
+        layout.addWidget(self._build_output_group())
+
+        scroll.setWidget(content)
+        return scroll
+
+    def _build_center_workspace(self) -> QWidget:
+        panel = QWidget()
+        panel.setMinimumWidth(500)
+        panel.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+
+        self.center_scroll_area = QScrollArea()
+        self.center_scroll_area.setObjectName("CenterWorkspaceScrollArea")
+        self.center_scroll_area.setWidgetResizable(True)
+        self.center_scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.center_scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.center_scroll_area.setFrameShape(QFrame.Shape.NoFrame)
+
+        self.center_content = QWidget()
+        self.center_content.setObjectName("CenterWorkspaceContent")
+        self.center_content.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
+        content_layout = QVBoxLayout(self.center_content)
+        content_layout.setContentsMargins(14, 16, 14, 16)
+        content_layout.setSpacing(14)
+
+        self.preview_group = self._build_preview_group()
+        self.subtitle_editor_group = self._build_subtitle_editor_group()
+        self.preview_resize_bar = CenterResizeBar()
+        self.preview_resize_bar.dragStarted.connect(self._start_preview_resize)
+        self.preview_resize_bar.dragMoved.connect(self._resize_preview_area)
+
+        content_layout.addWidget(self.preview_group)
+        content_layout.addWidget(self.preview_resize_bar)
+        content_layout.addWidget(self.subtitle_editor_group)
+        content_layout.addStretch(1)
+
+        self.center_scroll_area.setWidget(self.center_content)
+        layout.addWidget(self.center_scroll_area, 1)
+        return panel
+
+    def _build_inspector_panel(self) -> QScrollArea:
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setMinimumWidth(300)
+        scroll.setMaximumWidth(480)
+
+        content = QWidget()
+        content.setObjectName("InspectorContent")
+        layout = QVBoxLayout(content)
+        layout.setContentsMargins(12, 16, 16, 16)
+        layout.setSpacing(14)
+        layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        layout.addWidget(self._build_style_group())
+        layout.addWidget(self._build_cue_style_group())
+
+        scroll.setWidget(content)
+        return scroll
+
+    def _apply_default_workspace_sizes(self) -> None:
+        self.workspace_splitter.setSizes([380, 760, 380])
+        if hasattr(self, "preview_group"):
+            self._set_preview_target_height(560, save=False, user_set=False)
+
+    def _start_preview_resize(self) -> None:
+        self._preview_resize_start_height = self._preview_target_height
+
+    def _resize_preview_area(self, delta_y: int) -> None:
+        self._set_preview_target_height(
+            self._preview_resize_start_height + delta_y,
+            save=True,
+            user_set=True,
+        )
+
+    def _set_preview_target_height(
+        self,
+        height: int,
+        *,
+        save: bool = True,
+        user_set: bool = True,
+    ) -> None:
+        self._preview_target_height = max(300, min(4000, int(height)))
+        if user_set:
+            self._preview_height_user_set = True
+        self.preview_group.setMinimumHeight(self._preview_target_height)
+        self.center_content.updateGeometry()
+        self.center_scroll_area.widget().updateGeometry()
+        if save:
+            self._save_workspace_layout()
+
+    def _fit_preview_height_to_workspace(self, *, save: bool = False) -> None:
+        viewport_height = self.center_scroll_area.viewport().height() if hasattr(self, "center_scroll_area") else 0
+        target = max(360, min(720, round(viewport_height * 0.58))) if viewport_height else 560
+        self._set_preview_target_height(target, save=save, user_set=False)
+
+    def toggle_left_panel(self, checked: bool | None = None) -> None:
+        if self._focus_preview_active:
+            self._set_focus_preview(False)
+        visible = bool(checked) if checked is not None else not self._panel_visible(self.left_panel)
+        self._set_panel_visible(self.left_panel, visible, self.toggle_left_panel_action)
+        self._save_workspace_layout()
+
+    def toggle_right_panel(self, checked: bool | None = None) -> None:
+        if self._focus_preview_active:
+            self._set_focus_preview(False)
+        visible = bool(checked) if checked is not None else not self._panel_visible(self.right_panel)
+        self._set_panel_visible(self.right_panel, visible, self.toggle_right_panel_action)
+        self._save_workspace_layout()
+
+    def toggle_focus_preview(self, checked: bool | None = None) -> None:
+        enabled = bool(checked) if checked is not None else not self._focus_preview_active
+        self._set_focus_preview(enabled)
+        self._save_workspace_layout()
+
+    def reset_workspace_layout(self) -> None:
+        self._set_focus_preview(False, restore_previous=False)
+        self._set_panel_visible(self.left_panel, True, self.toggle_left_panel_action)
+        self._set_panel_visible(self.right_panel, True, self.toggle_right_panel_action)
+        self.subtitle_editor_group.setVisible(True)
+        self.preview_resize_bar.setVisible(True)
+        self._preview_height_user_set = False
+        self._apply_default_workspace_sizes()
+        self.center_scroll_area.verticalScrollBar().setValue(0)
+        self._set_all_collapsible_sections(True)
+        self._sync_layout_actions()
+        self._save_workspace_layout()
+        self.statusBar().showMessage("Workspace layout reset.", 5000)
+
+    def _set_panel_visible(self, panel: QWidget, visible: bool, action: QAction) -> None:
+        panel.setVisible(visible)
+        with QSignalBlocker(action):
+            action.setChecked(visible)
+        self._reclaim_workspace_space()
+
+    def _set_focus_preview(self, enabled: bool, *, restore_previous: bool = True) -> None:
+        if enabled == self._focus_preview_active:
+            with QSignalBlocker(self.focus_preview_action):
+                self.focus_preview_action.setChecked(enabled)
+            return
+
+        if enabled:
+            self._pre_focus_visibility = (
+                self._panel_visible(self.left_panel),
+                self._panel_visible(self.right_panel),
+                self._panel_visible(self.subtitle_editor_group),
+            )
+            self._pre_focus_layout = (
+                self.workspace_splitter.sizes(),
+                self._preview_target_height,
+                self.center_scroll_area.verticalScrollBar().value(),
+                self._preview_height_user_set,
+            )
+            self.left_panel.setVisible(False)
+            self.right_panel.setVisible(False)
+            self.subtitle_editor_group.setVisible(False)
+            self.preview_resize_bar.setVisible(False)
+            self.workspace_splitter.setSizes([0, max(1, self.workspace_splitter.width()), 0])
+            focus_height = max(
+                self._preview_target_height,
+                self.center_scroll_area.viewport().height() - 48,
+            )
+            self._set_preview_target_height(focus_height, save=False, user_set=False)
+            self.center_scroll_area.verticalScrollBar().setValue(0)
+        else:
+            self._focus_preview_active = False
+            left_visible, right_visible, editor_visible = self._pre_focus_visibility or (
+                self.toggle_left_panel_action.isChecked(),
+                self.toggle_right_panel_action.isChecked(),
+                True,
+            )
+            if restore_previous:
+                self.left_panel.setVisible(left_visible)
+                self.right_panel.setVisible(right_visible)
+                self.subtitle_editor_group.setVisible(editor_visible)
+            self._pre_focus_visibility = None
+            if restore_previous and self._pre_focus_layout:
+                workspace_sizes, preview_height, scroll_value, preview_user_set = self._pre_focus_layout
+                self.workspace_splitter.setSizes(workspace_sizes)
+                self._set_preview_target_height(preview_height, save=False, user_set=False)
+                self._preview_height_user_set = preview_user_set
+                self.center_scroll_area.verticalScrollBar().setValue(scroll_value)
+            else:
+                self._reclaim_workspace_space()
+            self.preview_resize_bar.setVisible(self._panel_visible(self.subtitle_editor_group))
+            self._pre_focus_layout = None
+
+        self._focus_preview_active = enabled
+        with QSignalBlocker(self.focus_preview_action):
+            self.focus_preview_action.setChecked(enabled)
+        self._sync_layout_actions()
+
+    def _reclaim_workspace_space(self) -> None:
+        if not hasattr(self, "workspace_splitter") or self._focus_preview_active:
+            return
+        total = max(1, self.workspace_splitter.width())
+        left = 360 if self._panel_visible(self.left_panel) else 0
+        right = 370 if self._panel_visible(self.right_panel) else 0
+        min_center = 520
+        min_side = 300
+        center = total - left - right
+        if center < min_center:
+            deficit = min_center - center
+            if left:
+                reduction = min(deficit // 2 + deficit % 2, max(0, left - min_side))
+                left -= reduction
+                deficit -= reduction
+            if right and deficit:
+                reduction = min(deficit, max(0, right - min_side))
+                right -= reduction
+                deficit -= reduction
+            center = max(1, total - left - right)
+        self.workspace_splitter.setSizes([left, center, right])
+
+    def _sync_layout_actions(self) -> None:
+        with QSignalBlocker(self.toggle_left_panel_action):
+            self.toggle_left_panel_action.setChecked(self._panel_visible(self.left_panel))
+        with QSignalBlocker(self.toggle_right_panel_action):
+            self.toggle_right_panel_action.setChecked(self._panel_visible(self.right_panel))
+        with QSignalBlocker(self.focus_preview_action):
+            self.focus_preview_action.setChecked(self._focus_preview_active)
+
+    def _panel_visible(self, panel: QWidget) -> bool:
+        return not panel.isHidden()
+
+    def _restore_workspace_layout(self) -> None:
+        workspace_state = self.settings.value("workspace/splitterState")
+        if workspace_state is not None:
+            self.workspace_splitter.restoreState(workspace_state)
+        self._preview_height_user_set = self._settings_bool("workspace/previewHeightUserSet", False)
+        if self._preview_height_user_set:
+            self._set_preview_target_height(
+                int(self.settings.value("workspace/previewHeight", self._preview_target_height)),
+                save=False,
+                user_set=False,
+            )
+        else:
+            self._fit_preview_height_to_workspace(save=False)
+
+        self.left_panel.setVisible(self._settings_bool("workspace/leftVisible", True))
+        self.right_panel.setVisible(self._settings_bool("workspace/rightVisible", True))
+        # The editor is only hidden temporarily in Focus Preview mode. Older saved
+        # sessions may contain editorVisible=False, so normalize startup to visible.
+        self.subtitle_editor_group.setVisible(True)
+        self.preview_resize_bar.setVisible(True)
+        self._focus_preview_active = False
+        if len(self.workspace_splitter.sizes()) >= 3 and self.workspace_splitter.sizes()[1] < 430:
+            self._reclaim_workspace_space()
+        if (
+            not self._panel_visible(self.left_panel)
+            and not self._panel_visible(self.right_panel)
+            and not self._panel_visible(self.subtitle_editor_group)
+        ):
+            self.subtitle_editor_group.setVisible(True)
+        self._sync_layout_actions()
+        self.center_scroll_area.verticalScrollBar().setValue(
+            int(self.settings.value("workspace/centerScrollValue", 0))
+        )
+        self._layout_restored = True
+
+    def _save_workspace_layout(self) -> None:
+        if not self._layout_restored:
+            return
+        if self._focus_preview_active and self._pre_focus_visibility:
+            left_visible, right_visible, editor_visible = self._pre_focus_visibility
+            if self._pre_focus_layout:
+                _workspace_sizes, preview_height, scroll_value, preview_user_set = self._pre_focus_layout
+            else:
+                preview_height = self._preview_target_height
+                scroll_value = self.center_scroll_area.verticalScrollBar().value()
+                preview_user_set = self._preview_height_user_set
+        else:
+            left_visible = self._panel_visible(self.left_panel)
+            right_visible = self._panel_visible(self.right_panel)
+            editor_visible = self._panel_visible(self.subtitle_editor_group)
+            preview_height = self._preview_target_height
+            scroll_value = self.center_scroll_area.verticalScrollBar().value()
+            preview_user_set = self._preview_height_user_set
+        self.settings.setValue("workspace/splitterState", self.workspace_splitter.saveState())
+        if preview_user_set:
+            self.settings.setValue("workspace/previewHeight", preview_height)
+        self.settings.setValue("workspace/previewHeightUserSet", preview_user_set)
+        self.settings.setValue("workspace/centerScrollValue", scroll_value)
+        self.settings.setValue("workspace/leftVisible", left_visible)
+        self.settings.setValue("workspace/rightVisible", right_visible)
+        self.settings.setValue("workspace/editorVisible", editor_visible)
+        self.settings.sync()
+
+    def _settings_bool(self, key: str, default: bool) -> bool:
+        value = self.settings.value(key, default)
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str):
+            return value.lower() in {"1", "true", "yes", "on"}
+        return bool(value)
+
+    def _configure_form(self, form: QFormLayout) -> None:
+        form.setLabelAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        form.setFormAlignment(Qt.AlignmentFlag.AlignTop)
+        form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
+        form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
+        form.setHorizontalSpacing(14)
+        form.setVerticalSpacing(10)
+
+    def _section_label(self, text: str, hint: str | None = None) -> QWidget:
+        section = QWidget()
+        layout = QVBoxLayout(section)
+        layout.setContentsMargins(0, 8, 0, 0)
+        layout.setSpacing(2)
+        title = QLabel(text)
+        title.setProperty("role", "sectionTitle")
+        layout.addWidget(title)
+        if hint:
+            subtitle = QLabel(hint)
+            subtitle.setObjectName("SectionHint")
+            subtitle.setWordWrap(True)
+            layout.addWidget(subtitle)
+        return section
+
+    def _build_collapsible_section(
+        self,
+        key: str,
+        title: str,
+        content: QWidget,
+        *,
+        default_expanded: bool = True,
+    ) -> CollapsibleSection:
+        expanded = self._settings_bool(f"sections/{key}Expanded", default_expanded)
+        section = CollapsibleSection(title, content, expanded=expanded)
+        section.toggled.connect(lambda is_expanded, section_key=key: self._save_section_state(section_key, is_expanded))
+        return section
+
+    def _save_section_state(self, key: str, expanded: bool) -> None:
+        self.settings.setValue(f"sections/{key}Expanded", expanded)
+        self.settings.sync()
+
+    def _set_all_collapsible_sections(self, expanded: bool) -> None:
+        for section in self.findChildren(CollapsibleSection):
+            section.set_expanded(expanded)
+
+    def _build_video_group(self) -> CollapsibleSection:
+        content = QWidget()
+        layout = QVBoxLayout(content)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(12)
 
         row = QHBoxLayout()
         self.video_path_edit = QLineEdit()
@@ -253,6 +814,8 @@ class MainWindow(QMainWindow):
         layout.addLayout(row)
 
         info_grid = QGridLayout()
+        info_grid.setHorizontalSpacing(12)
+        info_grid.setVerticalSpacing(8)
         self.video_labels: dict[str, QLabel] = {}
         labels = [
             ("width", "Width"),
@@ -269,11 +832,13 @@ class MainWindow(QMainWindow):
             self.video_labels[key] = value
             info_grid.addWidget(value, row_index // 2, (row_index % 2) * 2 + 1)
         layout.addLayout(info_grid)
-        return group
+        return self._build_collapsible_section("videoInput", "1. Video Input", content, default_expanded=True)
 
-    def _build_subtitle_group(self) -> QGroupBox:
-        group = QGroupBox("2. Subtitle Input")
-        layout = QVBoxLayout(group)
+    def _build_subtitle_group(self) -> CollapsibleSection:
+        content = QWidget()
+        layout = QVBoxLayout(content)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(12)
 
         row = QHBoxLayout()
         self.subtitle_path_edit = QLineEdit()
@@ -284,7 +849,6 @@ class MainWindow(QMainWindow):
         row.addWidget(browse)
         layout.addLayout(row)
 
-        options = QHBoxLayout()
         self.format_combo = QComboBox()
         self.format_combo.addItem("Auto Detect", "auto")
         for fmt in SUPPORTED_FORMATS:
@@ -303,21 +867,21 @@ class MainWindow(QMainWindow):
         self.txt_duration_spin.setSuffix(" sec")
 
         parse_button = QPushButton("Parse / Preview")
+        parse_button.setProperty("variant", "primary")
         parse_button.clicked.connect(self.parse_subtitles)
 
-        options.addWidget(QLabel("Format"))
-        options.addWidget(self.format_combo)
-        options.addWidget(self.txt_mode_combo)
-        layout.addLayout(options)
-
+        import_form = QFormLayout()
+        self._configure_form(import_form)
+        import_form.addRow("Format", self.format_combo)
+        import_form.addRow("TXT mode", self.txt_mode_combo)
         parse_row = QHBoxLayout()
-        parse_row.addWidget(QLabel("Line duration"))
+        parse_row.setSpacing(8)
         parse_row.addWidget(self.txt_duration_spin)
         parse_row.addWidget(parse_button)
-        parse_row.addStretch(1)
-        layout.addLayout(parse_row)
+        import_form.addRow("Line duration", parse_row)
+        layout.addLayout(import_form)
 
-        timing_row = QHBoxLayout()
+        layout.addWidget(self._section_label("Timing", "Trim subtitle ends after speech pauses and keep cue duration readable."))
         self.hold_after_spin = QDoubleSpinBox()
         self.hold_after_spin.setRange(0.0, 3.0)
         self.hold_after_spin.setSingleStep(0.05)
@@ -347,21 +911,18 @@ class MainWindow(QMainWindow):
             "Trim subtitle end times after speech pauses, and keep each cue inside min/max display duration."
         )
         auto_timing_button.clicked.connect(self.auto_cleanup_timings)
-        timing_row.addWidget(self.use_silence_detect_check)
-        timing_row.addWidget(QLabel("Hold after speech"))
-        timing_row.addWidget(self.hold_after_spin)
-        layout.addLayout(timing_row)
+        auto_timing_button.setProperty("variant", "secondary")
 
-        timing_row_2 = QHBoxLayout()
-        timing_row_2.addWidget(QLabel("Min"))
-        timing_row_2.addWidget(self.min_display_spin)
-        timing_row_2.addWidget(QLabel("Max"))
-        timing_row_2.addWidget(self.max_display_spin)
-        timing_row_2.addWidget(auto_timing_button)
-        timing_row_2.addStretch(1)
-        layout.addLayout(timing_row_2)
+        timing_form = QFormLayout()
+        self._configure_form(timing_form)
+        timing_form.addRow(self.use_silence_detect_check)
+        timing_form.addRow("Hold after speech", self.hold_after_spin)
+        timing_form.addRow("Min display", self.min_display_spin)
+        timing_form.addRow("Max display", self.max_display_spin)
+        timing_form.addRow(auto_timing_button)
+        layout.addLayout(timing_form)
 
-        speech_row = QHBoxLayout()
+        layout.addWidget(self._section_label("Speech Sync", "Optional Whisper transcription for timing and cue generation."))
         self.speech_model_combo = QComboBox()
         self.speech_model_combo.addItems(
             [
@@ -396,28 +957,51 @@ class MainWindow(QMainWindow):
         self.speech_sync_button.setToolTip(
             "Optional: uses faster-whisper to listen to video audio and generate synced subtitle cues."
         )
+        self.speech_sync_button.setProperty("variant", "primary")
         self.speech_sync_button.clicked.connect(self.start_speech_sync)
-        speech_row.addWidget(QLabel("Speech model"))
-        speech_row.addWidget(self.speech_model_combo)
-        speech_row.addWidget(self.speech_language_combo)
-        speech_row.addWidget(QLabel("Compute"))
-        speech_row.addWidget(self.speech_compute_combo)
-        speech_row.addWidget(QLabel("Beam"))
-        speech_row.addWidget(self.speech_beam_spin)
-        speech_row.addWidget(self.speech_sync_button)
-        speech_row.addStretch(1)
-        layout.addLayout(speech_row)
+
+        speech_form = QFormLayout()
+        self._configure_form(speech_form)
+        speech_form.addRow("Model", self.speech_model_combo)
+        speech_form.addRow("Language", self.speech_language_combo)
+        speech_compute_row = QHBoxLayout()
+        speech_compute_row.setSpacing(8)
+        speech_compute_row.addWidget(self.speech_compute_combo, 1)
+        speech_compute_row.addWidget(QLabel("Beam"))
+        speech_compute_row.addWidget(self.speech_beam_spin)
+        speech_form.addRow("Compute", speech_compute_row)
+        speech_form.addRow(self.speech_sync_button)
+        layout.addLayout(speech_form)
+
+        return self._build_collapsible_section("subtitleInput", "2. Subtitle Input", content, default_expanded=True)
+
+    def _build_subtitle_editor_group(self) -> QGroupBox:
+        group = QGroupBox("Subtitle Editor")
+        group.setMinimumHeight(660)
+        group.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        layout = QVBoxLayout(group)
+        layout.setSpacing(12)
 
         edit_row = QHBoxLayout()
-        apply_button = QPushButton("Apply Edits")
+        edit_row.setSpacing(8)
+        apply_button = QPushButton("Apply")
+        apply_button.setProperty("variant", "secondary")
+        apply_button.setToolTip("Apply table edits")
         apply_button.clicked.connect(self.apply_table_edits)
-        add_button = QPushButton("Add Subtitle")
+        add_button = QPushButton("Add")
+        add_button.setProperty("variant", "secondary")
+        add_button.setToolTip("Add subtitle")
         add_button.clicked.connect(self.add_subtitle_row)
-        delete_button = QPushButton("Delete Selected")
+        delete_button = QPushButton("Delete")
+        delete_button.setProperty("variant", "danger")
+        delete_button.setToolTip("Delete selected subtitles")
         delete_button.clicked.connect(self.delete_selected_subtitles)
-        preview_button = QPushButton("Preview Selected")
+        preview_button = QPushButton("Preview")
+        preview_button.setProperty("variant", "secondary")
+        preview_button.setToolTip("Preview selected subtitle")
         preview_button.clicked.connect(self.preview_selected_subtitle)
-        auto_arrange_button = QPushButton("Auto Arrange Text")
+        auto_arrange_button = QPushButton("Auto Arrange")
+        auto_arrange_button.setProperty("variant", "secondary")
         auto_arrange_button.setToolTip(
             "Press this after changing Max width or Max lines to re-wrap every subtitle and check edge safety."
         )
@@ -444,29 +1028,41 @@ class MainWindow(QMainWindow):
         self.subtitle_table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self.subtitle_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
         self.subtitle_table.verticalHeader().setVisible(False)
-        self.subtitle_table.setMinimumHeight(220)
+        self.subtitle_table.setAlternatingRowColors(True)
+        self.subtitle_table.setMinimumHeight(280)
+        self.subtitle_table.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.subtitle_table.itemChanged.connect(self._subtitle_table_changed)
         self.subtitle_table.itemSelectionChanged.connect(self.preview_selected_subtitle)
         layout.addWidget(self.subtitle_table)
 
         text_editor_row = QVBoxLayout()
         text_editor_header = QHBoxLayout()
-        text_editor_header.addWidget(QLabel("Selected subtitle text / line breaks"))
+        text_editor_header.setSpacing(8)
+        text_editor_label = QLabel("Text / line breaks")
+        text_editor_label.setMinimumWidth(0)
+        text_editor_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        text_editor_header.addWidget(text_editor_label, 1)
         apply_text_button = QPushButton("Apply Text")
+        apply_text_button.setProperty("variant", "secondary")
         apply_text_button.clicked.connect(self.apply_text_editor_to_selected)
-        text_editor_header.addStretch(1)
         text_editor_header.addWidget(apply_text_button)
         text_editor_row.addLayout(text_editor_header)
 
         self.subtitle_text_editor = QTextEdit()
         self.subtitle_text_editor.setPlaceholderText("Edit selected subtitle text here. Press Enter for a manual line break.")
-        self.subtitle_text_editor.setMinimumHeight(80)
+        self.subtitle_text_editor.setFixedHeight(120)
+        self.subtitle_text_editor.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.subtitle_text_editor.textChanged.connect(self._subtitle_text_editor_changed)
         text_editor_row.addWidget(self.subtitle_text_editor)
         layout.addLayout(text_editor_row)
 
-        cue_style_group = QGroupBox("Selected Subtitle Manual Style")
-        cue_style_form = QFormLayout(cue_style_group)
+        return group
+
+    def _build_cue_style_group(self) -> CollapsibleSection:
+        content = QWidget()
+        cue_style_form = QFormLayout(content)
+        cue_style_form.setContentsMargins(0, 0, 0, 0)
+        self._configure_form(cue_style_form)
         self.cue_style_override_check = QCheckBox("Use manual style for selected subtitle")
         cue_style_form.addRow(self.cue_style_override_check)
 
@@ -475,7 +1071,6 @@ class MainWindow(QMainWindow):
             self.cue_alignment_combo.addItem(label, key)
         cue_style_form.addRow("Alignment", self.cue_alignment_combo)
 
-        cue_position_row = QHBoxLayout()
         self.cue_text_position_combo = QComboBox()
         self.cue_text_position_combo.addItem("Auto", "auto")
         self.cue_text_position_combo.addItem("Custom", "custom")
@@ -485,10 +1080,9 @@ class MainWindow(QMainWindow):
         self.cue_custom_y_spin = QSpinBox()
         self.cue_custom_y_spin.setRange(0, 100)
         self.cue_custom_y_spin.setSuffix("% Y")
-        cue_position_row.addWidget(self.cue_text_position_combo)
-        cue_position_row.addWidget(self.cue_custom_x_spin)
-        cue_position_row.addWidget(self.cue_custom_y_spin)
-        cue_style_form.addRow("Position", cue_position_row)
+        cue_style_form.addRow("Position mode", self.cue_text_position_combo)
+        cue_style_form.addRow("Custom X", self.cue_custom_x_spin)
+        cue_style_form.addRow("Custom Y", self.cue_custom_y_spin)
 
         self.cue_font_size_spin = QSpinBox()
         self.cue_font_size_spin.setRange(8, 180)
@@ -521,19 +1115,28 @@ class MainWindow(QMainWindow):
         cue_style_form.addRow("Auto offset", self.cue_auto_alignment_offset_label)
 
         clear_cue_style_button = QPushButton("Clear Manual Style")
+        clear_cue_style_button.setProperty("variant", "secondary")
         clear_cue_style_button.clicked.connect(self.clear_selected_cue_style)
         cue_style_form.addRow(clear_cue_style_button)
-        layout.addWidget(cue_style_group)
-        return group
+        return self._build_collapsible_section(
+            "selectedSubtitleManualStyle",
+            "Selected Subtitle Manual Style",
+            content,
+            default_expanded=True,
+        )
 
-    def _build_style_group(self) -> QGroupBox:
-        group = QGroupBox("3. Style Settings")
-        layout = QVBoxLayout(group)
+    def _build_style_group(self) -> CollapsibleSection:
+        content = QWidget()
+        layout = QVBoxLayout(content)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(12)
 
         preset_row = QHBoxLayout()
+        preset_row.setSpacing(8)
         self.preset_combo = QComboBox()
         self.preset_combo.addItems(STYLE_PRESETS.keys())
         auto_size_button = QPushButton("Auto Size")
+        auto_size_button.setProperty("variant", "secondary")
         auto_size_button.clicked.connect(self.apply_auto_size)
         preset_row.addWidget(QLabel("Preset"))
         preset_row.addWidget(self.preset_combo, 1)
@@ -541,6 +1144,7 @@ class MainWindow(QMainWindow):
         layout.addLayout(preset_row)
 
         form = QFormLayout()
+        self._configure_form(form)
         self.font_combo = self._build_font_family_combo()
         self.font_size_spin = QSpinBox()
         self.font_size_spin.setRange(8, 180)
@@ -548,16 +1152,11 @@ class MainWindow(QMainWindow):
         form.addRow("Font family", self.font_combo)
         form.addRow("Font size", self.font_size_spin)
 
-        color_row = QHBoxLayout()
         self.font_color_button = self._make_color_button("#FFFFFF")
         self.shadow_color_button = self._make_color_button("#000000")
-        color_row.addWidget(QLabel("Text"))
-        color_row.addWidget(self.font_color_button)
-        color_row.addWidget(QLabel("Shadow"))
-        color_row.addWidget(self.shadow_color_button)
-        form.addRow("Colors", color_row)
+        form.addRow("Text color", self.font_color_button)
+        form.addRow("Shadow color", self.shadow_color_button)
 
-        stroke_row = QHBoxLayout()
         self.stroke_check = QCheckBox("Enabled")
         self.stroke_check.setChecked(True)
         self.stroke_color_button = self._make_color_button("#000000")
@@ -565,14 +1164,10 @@ class MainWindow(QMainWindow):
         self.stroke_width_spin.setRange(0, 12)
         self.stroke_width_spin.setSingleStep(0.5)
         self.stroke_width_spin.setValue(3)
-        stroke_row.addWidget(self.stroke_check)
-        stroke_row.addWidget(QLabel("Color"))
-        stroke_row.addWidget(self.stroke_color_button)
-        stroke_row.addWidget(QLabel("Width"))
-        stroke_row.addWidget(self.stroke_width_spin)
-        form.addRow("Stroke", stroke_row)
+        form.addRow("Stroke", self.stroke_check)
+        form.addRow("Stroke color", self.stroke_color_button)
+        form.addRow("Stroke width", self.stroke_width_spin)
 
-        shadow_row = QHBoxLayout()
         self.shadow_check = QCheckBox("Enabled")
         self.shadow_check.setChecked(True)
         self.shadow_offset_spin = QDoubleSpinBox()
@@ -582,25 +1177,19 @@ class MainWindow(QMainWindow):
         self.shadow_blur_spin = QDoubleSpinBox()
         self.shadow_blur_spin.setRange(0, 8)
         self.shadow_blur_spin.setSingleStep(0.5)
-        shadow_row.addWidget(self.shadow_check)
-        shadow_row.addWidget(QLabel("Offset"))
-        shadow_row.addWidget(self.shadow_offset_spin)
-        shadow_row.addWidget(QLabel("Blur"))
-        shadow_row.addWidget(self.shadow_blur_spin)
-        form.addRow("Shadow", shadow_row)
+        form.addRow("Shadow", self.shadow_check)
+        form.addRow("Shadow offset", self.shadow_offset_spin)
+        form.addRow("Shadow blur", self.shadow_blur_spin)
 
-        background_row = QHBoxLayout()
         self.background_check = QCheckBox("Box")
         self.background_color_button = self._make_color_button("#000000")
         self.background_opacity_spin = QSpinBox()
         self.background_opacity_spin.setRange(0, 100)
         self.background_opacity_spin.setValue(55)
         self.background_opacity_spin.setSuffix("%")
-        background_row.addWidget(self.background_check)
-        background_row.addWidget(self.background_color_button)
-        background_row.addWidget(QLabel("Opacity"))
-        background_row.addWidget(self.background_opacity_spin)
-        form.addRow("Background", background_row)
+        form.addRow("Background box", self.background_check)
+        form.addRow("Background color", self.background_color_button)
+        form.addRow("Background opacity", self.background_opacity_spin)
 
         self.alignment_combo = QComboBox()
         for key, label in ALIGNMENTS.items():
@@ -660,7 +1249,6 @@ class MainWindow(QMainWindow):
         self.max_lines_spin.setToolTip("Default is 2 lines. Auto Arrange splits long subtitles into more cues instead of showing more lines.")
         form.addRow("Max lines", self.max_lines_spin)
 
-        position_row = QHBoxLayout()
         self.text_position_combo = QComboBox()
         self.text_position_combo.addItem("Auto", "auto")
         self.text_position_combo.addItem("Custom", "custom")
@@ -672,33 +1260,44 @@ class MainWindow(QMainWindow):
         self.custom_y_spin.setRange(0, 100)
         self.custom_y_spin.setValue(84)
         self.custom_y_spin.setSuffix("% Y")
-        position_row.addWidget(self.text_position_combo)
-        position_row.addWidget(self.custom_x_spin)
-        position_row.addWidget(self.custom_y_spin)
-        form.addRow("Text position", position_row)
+        form.addRow("Position mode", self.text_position_combo)
+        form.addRow("Custom X", self.custom_x_spin)
+        form.addRow("Custom Y", self.custom_y_spin)
 
         layout.addLayout(form)
-        return group
+        return self._build_collapsible_section(
+            "globalSubtitleStyle",
+            "3. Global Subtitle Style",
+            content,
+            default_expanded=True,
+        )
 
     def _build_preview_group(self) -> QGroupBox:
         group = QGroupBox("Preview")
+        group.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         layout = QVBoxLayout(group)
+        layout.setSpacing(10)
         self.preview_widget = SubtitlePreviewWidget()
+        self.preview_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.preview_widget.activeCueChanged.connect(self.select_subtitle_from_playback)
         self.preview_widget.accuratePreviewRequested.connect(self.render_accurate_preview)
         self.preview_widget.accurateVideoRequested.connect(self.render_accurate_preview_video)
         layout.addWidget(self.preview_widget)
 
         self.summary_label = QLabel("Video: - | Subtitle count: 0")
+        self.summary_label.setObjectName("SummaryLabel")
         self.summary_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         layout.addWidget(self.summary_label)
         return group
 
-    def _build_output_group(self) -> QGroupBox:
-        group = QGroupBox("4. Output")
-        layout = QVBoxLayout(group)
+    def _build_output_group(self) -> CollapsibleSection:
+        content = QWidget()
+        layout = QVBoxLayout(content)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(12)
 
         row = QHBoxLayout()
+        row.setSpacing(8)
         self.output_path_edit = QLineEdit()
         self.output_path_edit.setPlaceholderText("Choose output .mp4 path...")
         browse = QPushButton("Save As")
@@ -712,26 +1311,30 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.progress_bar)
 
         self.log_view = QTextEdit()
+        self.log_view.setObjectName("LogView")
         self.log_view.setReadOnly(True)
         self.log_view.setMinimumHeight(90)
         layout.addWidget(self.log_view)
 
         self.generate_button = QPushButton("Generate Subtitle Video")
+        self.generate_button.setProperty("variant", "primary")
         self.generate_button.clicked.connect(self.generate_video)
         self.generate_button.setMinimumHeight(42)
         self.render_preview_button = QPushButton("Render Preview Video")
+        self.render_preview_button.setProperty("variant", "secondary")
         self.render_preview_button.setToolTip(
             "Render a temporary preview video with the same FFmpeg/libass path used by export."
         )
         self.render_preview_button.clicked.connect(self.render_accurate_preview_video)
         self.render_preview_button.setMinimumHeight(36)
         self.export_subtitle_button = QPushButton("Export Edited Subtitle")
+        self.export_subtitle_button.setProperty("variant", "secondary")
         self.export_subtitle_button.clicked.connect(self.export_edited_subtitle)
         self.export_subtitle_button.setMinimumHeight(36)
         layout.addWidget(self.render_preview_button)
         layout.addWidget(self.export_subtitle_button)
         layout.addWidget(self.generate_button)
-        return group
+        return self._build_collapsible_section("output", "4. Output", content, default_expanded=True)
 
     def _connect_style_signals(self) -> None:
         widgets = [
@@ -805,6 +1408,7 @@ class MainWindow(QMainWindow):
 
     def _make_color_button(self, initial: str) -> QPushButton:
         button = QPushButton(initial)
+        button.setObjectName("ColorButton")
         button.setProperty("color", initial)
         button.clicked.connect(lambda checked=False, b=button: self.choose_color(b))
         self._sync_color_button(button, initial)
@@ -821,7 +1425,8 @@ class MainWindow(QMainWindow):
         button.setProperty("color", color)
         button.setText(color)
         button.setStyleSheet(
-            f"QPushButton {{ background: {color}; color: {self._contrast_text(color)}; border: 1px solid #88929E; }}"
+            f"QPushButton#ColorButton {{ background: {color}; color: {self._contrast_text(color)}; "
+            "border: 1px solid #88929E; border-radius: 7px; min-height: 30px; padding: 5px 10px; }}"
         )
 
     def select_video(self) -> None:
@@ -2070,6 +2675,8 @@ class MainWindow(QMainWindow):
             )
         count = len(self.subtitle_doc) if self.subtitle_doc else 0
         self.summary_label.setText(f"Video: {video} | Subtitle count: {count}")
+        if hasattr(self, "header_status_label"):
+            self.header_status_label.setText(f"{video} | Cues: {count}")
 
     def _set_combo_data(self, combo: QComboBox, data: str) -> None:
         index = combo.findData(data)
@@ -2091,59 +2698,23 @@ class MainWindow(QMainWindow):
         self.log_view.append(message)
         self.statusBar().showMessage(message[:180], 7000)
 
+    def closeEvent(self, event) -> None:  # noqa: N802 - Qt override
+        self._save_workspace_layout()
+        super().closeEvent(event)
+
+    def showEvent(self, event) -> None:  # noqa: N802 - Qt override
+        super().showEvent(event)
+        if not self._preview_height_user_set and not self._focus_preview_active:
+            self._fit_preview_height_to_workspace(save=False)
+
     def _contrast_text(self, hex_color: str) -> str:
         color = QColor(hex_color)
         brightness = (color.red() * 299 + color.green() * 587 + color.blue() * 114) / 1000
         return "#111111" if brightness > 150 else "#FFFFFF"
 
     def _apply_light_stylesheet(self) -> None:
-        self.setStyleSheet(
-            """
-            QMainWindow, QWidget {
-                font-family: Segoe UI, Tahoma, Arial;
-                font-size: 10pt;
-            }
-            QGroupBox {
-                border: 1px solid #C9D2DC;
-                border-radius: 6px;
-                margin-top: 10px;
-                padding: 10px;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                left: 10px;
-                padding: 0 4px;
-                color: #26323D;
-                font-weight: 600;
-            }
-            QPushButton {
-                border: 1px solid #8A98A8;
-                border-radius: 6px;
-                padding: 6px 10px;
-                background: #FFFFFF;
-            }
-            QPushButton:hover {
-                background: #E9F2FF;
-            }
-            QPushButton:disabled {
-                color: #8A8F95;
-                background: #ECEFF3;
-            }
-            QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox, QTextEdit, QTableWidget {
-                border: 1px solid #B9C4D0;
-                border-radius: 6px;
-                padding: 4px;
-                background: #FFFFFF;
-            }
-            QProgressBar {
-                border: 1px solid #B9C4D0;
-                border-radius: 6px;
-                text-align: center;
-                min-height: 20px;
-            }
-            QProgressBar::chunk {
-                background: #2F7D5B;
-                border-radius: 5px;
-            }
-            """
-        )
+        theme_path = Path(__file__).with_name("theme.qss")
+        try:
+            self.setStyleSheet(theme_path.read_text(encoding="utf-8"))
+        except OSError:
+            self.setStyleSheet("")
