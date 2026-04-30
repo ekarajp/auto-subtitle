@@ -4,7 +4,7 @@ import tempfile
 from pathlib import Path
 
 from PySide6.QtCore import QLocale, QSettings, QSignalBlocker, Qt, QThread, Signal
-from PySide6.QtGui import QAction, QColor, QFont, QFontDatabase, QFontMetrics, QImage, QKeySequence, QPainter, QPen
+from PySide6.QtGui import QAction, QColor, QFont, QFontDatabase, QFontMetrics, QImage, QKeySequence, QPainter, QPen, QShortcut
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
@@ -27,12 +27,15 @@ from PySide6.QtWidgets import (
     QPushButton,
     QRadioButton,
     QProgressBar,
+    QMenu,
     QScrollArea,
     QSizePolicy,
     QSpinBox,
     QSplitter,
     QTableWidget,
     QTableWidgetItem,
+    QTabWidget,
+    QTextBrowser,
     QTextEdit,
     QToolButton,
     QVBoxLayout,
@@ -58,7 +61,7 @@ from core.subtitle_arranger import arrange_cues_for_readability
 from core.subtitle_exporter import SubtitleExportError, export_subtitle_file
 from core.subtitle_parser import SUPPORTED_FORMATS, detect_subtitle_format, parse_subtitle_file
 from core.subtitle_timing import cleanup_subtitle_timings
-from core.speech_sync import SpeechSyncOptions
+from core.speech_sync import SpeechSyncOptions, SpeechSyncResult
 from core.video_info import VideoInfo, VideoProbeError, probe_video
 from core.subtitle_layout import wrap_subtitle_text
 from ui.preview_widget import SubtitlePreviewWidget
@@ -86,6 +89,13 @@ COLLAPSIBLE_SECTION_KEYS = (
     "selectedSubtitleManualStyle",
 )
 COLLAPSIBLE_DEFAULTS_VERSION = 2
+HELP_DOCS_DIR = Path(__file__).resolve().parents[1] / "docs"
+HELP_SECTIONS = (
+    ("Quick Start", "quick_start.md"),
+    ("User Guide", "user_manual.md"),
+    ("Keyboard Shortcuts", "keyboard_shortcuts.md"),
+    ("Troubleshooting / FAQ", "troubleshooting.md"),
+)
 
 
 class CenterResizeBar(QWidget):
@@ -139,6 +149,63 @@ class CenterResizeBar(QWidget):
     def mouseReleaseEvent(self, event) -> None:  # noqa: N802 - Qt override
         self._drag_start_y = None
         super().mouseReleaseEvent(event)
+
+
+class TextEditorResizeBar(QWidget):
+    """Small vertical drag handle for resizing the selected subtitle text editor."""
+
+    dragStarted = Signal()
+    dragMoved = Signal(int)
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setObjectName("TextEditorResizeBar")
+        self.setCursor(Qt.CursorShape.SplitVCursor)
+        self.setFixedHeight(10)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self._drag_start_y: int | None = None
+
+    def paintEvent(self, event) -> None:  # noqa: N802 - Qt override
+        del event
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        rect = self.rect()
+        painter.fillRect(rect, QColor("#EEF3F8"))
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor("#7B8DA1"))
+        center_x = rect.center().x()
+        center_y = rect.center().y()
+        for offset in (-14, -6, 2, 10):
+            painter.drawRoundedRect(center_x + offset, center_y - 1, 4, 3, 2, 2)
+        painter.end()
+
+    def mousePressEvent(self, event) -> None:  # noqa: N802 - Qt override
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._drag_start_y = round(event.globalPosition().y())
+            self.dragStarted.emit()
+            event.accept()
+            return
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event) -> None:  # noqa: N802 - Qt override
+        if self._drag_start_y is not None:
+            self.dragMoved.emit(round(event.globalPosition().y()) - self._drag_start_y)
+            event.accept()
+            return
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event) -> None:  # noqa: N802 - Qt override
+        self._drag_start_y = None
+        super().mouseReleaseEvent(event)
+
+
+class SubtitleTableResizeBar(TextEditorResizeBar):
+    """Drag handle for resizing the subtitle cue table height."""
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setObjectName("SubtitleTableResizeBar")
+        self.setToolTip("Drag to resize subtitle list height")
 
 
 class CollapsibleSection(QFrame):
@@ -199,11 +266,51 @@ class CollapsibleSection(QFrame):
             self.toggled.emit(expanded)
 
 
+class HelpDialog(QDialog):
+    """Tabbed Markdown help viewer for end-user documentation."""
+
+    def __init__(
+        self,
+        sections: list[tuple[str, str]],
+        *,
+        current_title: str = "User Guide",
+        parent: QWidget | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self.setObjectName("HelpDialog")
+        self.setWindowTitle("Smart Subtitle Help")
+        self.resize(980, 760)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(14, 14, 14, 14)
+        layout.setSpacing(12)
+
+        self.tabs = QTabWidget()
+        self.tabs.setObjectName("HelpTabs")
+        layout.addWidget(self.tabs, 1)
+
+        current_index = 0
+        for index, (title, markdown) in enumerate(sections):
+            browser = QTextBrowser()
+            browser.setObjectName("HelpBrowser")
+            browser.setOpenExternalLinks(True)
+            browser.setMarkdown(markdown)
+            self.tabs.addTab(browser, title)
+            if title == current_title:
+                current_index = index
+
+        self.tabs.setCurrentIndex(current_index)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+
 class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle("Smart Subtitle")
-        self.setMinimumSize(1180, 760)
+        self.setMinimumSize(960, 640)
         self.resize(1440, 900)
 
         self.video_info: VideoInfo | None = None
@@ -217,6 +324,12 @@ class MainWindow(QMainWindow):
         self.speech_worker: SpeechSyncWorker | None = None
         self._updating_table = False
         self._updating_text_editor = False
+        self._updating_cue_detail = False
+        self._current_playhead_ms = 0
+        self._subtitle_table_height = 240
+        self._subtitle_table_resize_start_height = self._subtitle_table_height
+        self._subtitle_text_editor_height = 120
+        self._subtitle_text_editor_resize_start_height = self._subtitle_text_editor_height
         self._updating_cue_style_controls = False
         self._selecting_from_playback = False
         self._restoring_history = False
@@ -227,7 +340,7 @@ class MainWindow(QMainWindow):
         self._focus_preview_active = False
         self._pre_focus_visibility: tuple[bool, bool, bool] | None = None
         self._pre_focus_layout: tuple[list[int], int, int, bool] | None = None
-        self._preview_target_height = 560
+        self._preview_target_height = 360
         self._preview_resize_start_height = self._preview_target_height
         self._preview_height_user_set = False
 
@@ -300,6 +413,59 @@ class MainWindow(QMainWindow):
         redo_action.setShortcuts(redo_shortcuts)
         redo_action.triggered.connect(self.redo)
         edit_menu.addAction(redo_action)
+
+        help_menu = self.menuBar().addMenu("&Help")
+
+        quick_start_action = QAction("Quick Start", self)
+        quick_start_action.triggered.connect(lambda: self.open_help("Quick Start"))
+        help_menu.addAction(quick_start_action)
+
+        user_guide_action = QAction("User Guide / Manual", self)
+        user_guide_action.setShortcut(QKeySequence("F1"))
+        user_guide_action.triggered.connect(lambda: self.open_help("User Guide"))
+        help_menu.addAction(user_guide_action)
+
+        shortcuts_action = QAction("Keyboard Shortcuts", self)
+        shortcuts_action.triggered.connect(lambda: self.open_help("Keyboard Shortcuts"))
+        help_menu.addAction(shortcuts_action)
+
+        troubleshooting_action = QAction("Troubleshooting / FAQ", self)
+        troubleshooting_action.triggered.connect(lambda: self.open_help("Troubleshooting / FAQ"))
+        help_menu.addAction(troubleshooting_action)
+
+        help_menu.addSeparator()
+        about_action = QAction("About Smart Subtitle", self)
+        about_action.triggered.connect(self.show_about_dialog)
+        help_menu.addAction(about_action)
+
+    def open_help(self, section_title: str = "User Guide") -> None:
+        sections = [(title, self._read_help_document(filename)) for title, filename in HELP_SECTIONS]
+        self._help_dialog = HelpDialog(sections, current_title=section_title, parent=self)
+        self._help_dialog.show()
+        self._help_dialog.raise_()
+        self._help_dialog.activateWindow()
+
+    def _read_help_document(self, filename: str) -> str:
+        path = HELP_DOCS_DIR / filename
+        try:
+            return path.read_text(encoding="utf-8")
+        except OSError:
+            return (
+                "# Help file not found\n\n"
+                f"Smart Subtitle could not open `{path}`.\n\n"
+                "The application can still run, but the help documentation is missing."
+            )
+
+    def show_about_dialog(self) -> None:
+        QMessageBox.about(
+            self,
+            "About Smart Subtitle",
+            (
+                "<b>Smart Subtitle</b><br>"
+                "A desktop application for syncing, editing, styling, previewing, and exporting subtitles.<br><br>"
+                "Built with Python, PySide6, and FFmpeg."
+            ),
+        )
 
     def undo(self) -> None:
         focus = self.focusWidget()
@@ -417,6 +583,7 @@ class MainWindow(QMainWindow):
 
         self.header_status_label = QLabel("No project loaded")
         self.header_status_label.setObjectName("HeaderStatus")
+        self.header_status_label.setMinimumWidth(0)
         self.header_status_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self.header_status_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
 
@@ -444,8 +611,8 @@ class MainWindow(QMainWindow):
         scroll.setWidgetResizable(True)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
-        scroll.setMinimumWidth(300)
-        scroll.setMaximumWidth(470)
+        scroll.setMinimumWidth(240)
+        scroll.setMaximumWidth(430)
 
         content = QWidget()
         content.setObjectName("SidebarContent")
@@ -463,7 +630,7 @@ class MainWindow(QMainWindow):
 
     def _build_center_workspace(self) -> QWidget:
         panel = QWidget()
-        panel.setMinimumWidth(500)
+        panel.setMinimumWidth(420)
         panel.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         layout = QVBoxLayout(panel)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -503,8 +670,8 @@ class MainWindow(QMainWindow):
         scroll.setWidgetResizable(True)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
-        scroll.setMinimumWidth(300)
-        scroll.setMaximumWidth(480)
+        scroll.setMinimumWidth(240)
+        scroll.setMaximumWidth(430)
 
         content = QWidget()
         content.setObjectName("InspectorContent")
@@ -519,9 +686,9 @@ class MainWindow(QMainWindow):
         return scroll
 
     def _apply_default_workspace_sizes(self) -> None:
-        self.workspace_splitter.setSizes([380, 760, 380])
+        self.workspace_splitter.setSizes([300, 840, 300])
         if hasattr(self, "preview_group"):
-            self._set_preview_target_height(560, save=False, user_set=False)
+            self._set_preview_target_height(360, save=False, user_set=False)
 
     def _start_preview_resize(self) -> None:
         self._preview_resize_start_height = self._preview_target_height
@@ -540,10 +707,10 @@ class MainWindow(QMainWindow):
         save: bool = True,
         user_set: bool = True,
     ) -> None:
-        self._preview_target_height = max(300, min(4000, int(height)))
+        self._preview_target_height = max(220, min(4000, int(height)))
         if user_set:
             self._preview_height_user_set = True
-        self.preview_group.setMinimumHeight(self._preview_target_height)
+        self.preview_group.setFixedHeight(self._preview_target_height)
         self.center_content.updateGeometry()
         self.center_scroll_area.widget().updateGeometry()
         if save:
@@ -551,7 +718,7 @@ class MainWindow(QMainWindow):
 
     def _fit_preview_height_to_workspace(self, *, save: bool = False) -> None:
         viewport_height = self.center_scroll_area.viewport().height() if hasattr(self, "center_scroll_area") else 0
-        target = max(360, min(720, round(viewport_height * 0.58))) if viewport_height else 560
+        target = max(240, min(430, round(viewport_height * 0.38))) if viewport_height else 360
         self._set_preview_target_height(target, save=save, user_set=False)
 
     def toggle_left_panel(self, checked: bool | None = None) -> None:
@@ -654,10 +821,10 @@ class MainWindow(QMainWindow):
         if not hasattr(self, "workspace_splitter") or self._focus_preview_active:
             return
         total = max(1, self.workspace_splitter.width())
-        left = 360 if self._panel_visible(self.left_panel) else 0
-        right = 370 if self._panel_visible(self.right_panel) else 0
-        min_center = 520
-        min_side = 300
+        left = 300 if self._panel_visible(self.left_panel) else 0
+        right = 300 if self._panel_visible(self.right_panel) else 0
+        min_center = 420
+        min_side = 240
         center = total - left - right
         if center < min_center:
             deficit = min_center - center
@@ -959,6 +1126,11 @@ class MainWindow(QMainWindow):
         )
         self.speech_sync_button.setProperty("variant", "primary")
         self.speech_sync_button.clicked.connect(self.start_speech_sync)
+        self.speech_preserve_source_check = QCheckBox("Preserve existing subtitle text")
+        self.speech_preserve_source_check.setChecked(True)
+        self.speech_preserve_source_check.setToolTip(
+            "When subtitles already exist, Whisper is used for timing only. The original text is not replaced by ASR."
+        )
 
         speech_form = QFormLayout()
         self._configure_form(speech_form)
@@ -970,6 +1142,7 @@ class MainWindow(QMainWindow):
         speech_compute_row.addWidget(QLabel("Beam"))
         speech_compute_row.addWidget(self.speech_beam_spin)
         speech_form.addRow("Compute", speech_compute_row)
+        speech_form.addRow(self.speech_preserve_source_check)
         speech_form.addRow(self.speech_sync_button)
         layout.addLayout(speech_form)
 
@@ -977,10 +1150,10 @@ class MainWindow(QMainWindow):
 
     def _build_subtitle_editor_group(self) -> QGroupBox:
         group = QGroupBox("Subtitle Editor")
-        group.setMinimumHeight(660)
+        group.setMinimumHeight(430)
         group.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         layout = QVBoxLayout(group)
-        layout.setSpacing(12)
+        layout.setSpacing(10)
 
         edit_row = QHBoxLayout()
         edit_row.setSpacing(8)
@@ -1006,57 +1179,217 @@ class MainWindow(QMainWindow):
             "Press this after changing Max width or Max lines to re-wrap every subtitle and check edge safety."
         )
         auto_arrange_button.clicked.connect(self.auto_arrange_subtitle_text)
+        split_button = QPushButton("Split")
+        split_button.setProperty("variant", "secondary")
+        split_button.setToolTip("Split selected cue at the current preview playhead.")
+        split_button.clicked.connect(self.split_selected_cue)
+        merge_prev_button = QPushButton("Merge Prev")
+        merge_prev_button.setProperty("variant", "secondary")
+        merge_prev_button.setToolTip("Merge selected cue with the previous cue.")
+        merge_prev_button.clicked.connect(self.merge_selected_with_previous)
+        merge_next_button = QPushButton("Merge Next")
+        merge_next_button.setProperty("variant", "secondary")
+        merge_next_button.setToolTip("Merge selected cue with the next cue.")
+        merge_next_button.clicked.connect(self.merge_selected_with_next)
         edit_row.addWidget(apply_button)
         edit_row.addWidget(add_button)
         edit_row.addWidget(delete_button)
+        edit_row.addWidget(split_button)
+        edit_row.addWidget(merge_prev_button)
+        edit_row.addWidget(merge_next_button)
+        edit_row.addWidget(preview_button)
+        edit_row.addWidget(auto_arrange_button)
         edit_row.addStretch(1)
         layout.addLayout(edit_row)
 
-        edit_row_2 = QHBoxLayout()
-        edit_row_2.addWidget(preview_button)
-        edit_row_2.addWidget(auto_arrange_button)
-        edit_row_2.addStretch(1)
-        layout.addLayout(edit_row_2)
-
-        self.subtitle_table = QTableWidget(0, 4)
-        self.subtitle_table.setHorizontalHeaderLabels(["#", "Start", "End", "Text"])
+        self.subtitle_table = QTableWidget(0, 5)
+        self.subtitle_table.setObjectName("SubtitleCueTable")
+        self.subtitle_table.setHorizontalHeaderLabels(["#", "Start", "End", "Duration", "Subtitle text"])
         self.subtitle_table.setEditTriggers(
             QAbstractItemView.EditTrigger.DoubleClicked
             | QAbstractItemView.EditTrigger.EditKeyPressed
         )
         self.subtitle_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.subtitle_table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
-        self.subtitle_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
+        self.subtitle_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
+        self.subtitle_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        self.subtitle_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        self.subtitle_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+        self.subtitle_table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.Stretch)
+        self.subtitle_table.setColumnWidth(0, 44)
         self.subtitle_table.verticalHeader().setVisible(False)
         self.subtitle_table.setAlternatingRowColors(True)
-        self.subtitle_table.setMinimumHeight(280)
-        self.subtitle_table.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self.subtitle_table.setWordWrap(True)
+        self.subtitle_table.setMinimumHeight(96)
+        self.subtitle_table.setFixedHeight(self._subtitle_table_height)
+        self.subtitle_table.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.subtitle_table.itemChanged.connect(self._subtitle_table_changed)
         self.subtitle_table.itemSelectionChanged.connect(self.preview_selected_subtitle)
         layout.addWidget(self.subtitle_table)
+        self.subtitle_table_resize_bar = SubtitleTableResizeBar()
+        self.subtitle_table_resize_bar.dragStarted.connect(self._start_subtitle_table_resize)
+        self.subtitle_table_resize_bar.dragMoved.connect(self._resize_subtitle_table)
+        layout.addWidget(self.subtitle_table_resize_bar)
 
-        text_editor_row = QVBoxLayout()
+        detail_panel = QFrame()
+        detail_panel.setObjectName("CueDetailPanel")
+        detail_layout = QVBoxLayout(detail_panel)
+        detail_layout.setContentsMargins(14, 12, 14, 14)
+        detail_layout.setSpacing(10)
+
+        detail_header = QHBoxLayout()
+        detail_title = QLabel("Selected Cue Timing")
+        detail_title.setProperty("role", "sectionTitle")
+        self.cue_detail_status_label = QLabel("No cue selected")
+        self.cue_detail_status_label.setObjectName("SectionHint")
+        self.cue_detail_status_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        detail_header.addWidget(detail_title)
+        detail_header.addWidget(self.cue_detail_status_label, 1)
+        detail_layout.addLayout(detail_header)
+
+        timing_grid = QGridLayout()
+        timing_grid.setHorizontalSpacing(10)
+        timing_grid.setVerticalSpacing(8)
+        self.cue_start_edit = QLineEdit()
+        self.cue_start_edit.setPlaceholderText("00:00:00.000")
+        self.cue_end_edit = QLineEdit()
+        self.cue_end_edit.setPlaceholderText("00:00:00.000")
+        self.cue_duration_spin = QDoubleSpinBox()
+        self.cue_duration_spin.setRange(0.05, 3600.0)
+        self.cue_duration_spin.setDecimals(3)
+        self.cue_duration_spin.setSingleStep(0.1)
+        self.cue_duration_spin.setSuffix(" sec")
+        timing_grid.addWidget(QLabel("Start"), 0, 0)
+        timing_grid.addWidget(self.cue_start_edit, 0, 1)
+        timing_grid.addWidget(QLabel("End"), 0, 2)
+        timing_grid.addWidget(self.cue_end_edit, 0, 3)
+        timing_grid.addWidget(QLabel("Duration"), 0, 4)
+        timing_grid.addWidget(self.cue_duration_spin, 0, 5)
+        detail_layout.addLayout(timing_grid)
+
+        timing_actions_row = QHBoxLayout()
+        timing_actions_row.setSpacing(8)
+        set_start_button = QPushButton("Set Start = Current")
+        set_start_button.setProperty("variant", "primary")
+        set_start_button.clicked.connect(lambda: self.set_selected_cue_time_from_playhead("start"))
+        set_end_button = QPushButton("Set End = Current")
+        set_end_button.setProperty("variant", "primary")
+        set_end_button.clicked.connect(lambda: self.set_selected_cue_time_from_playhead("end"))
+        self.nudge_menu_button = QToolButton()
+        self.nudge_menu_button.setObjectName("NudgeMenuButton")
+        self.nudge_menu_button.setText("Nudge...")
+        self.nudge_menu_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        self.nudge_menu_button.setMenu(self._build_nudge_menu())
+        self.cue_current_time_label = QLabel("Current: 00:00:00.000")
+        self.cue_current_time_label.setObjectName("SectionHint")
+        self.cue_current_time_label.setMinimumWidth(140)
+        self.cue_current_time_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        timing_actions_row.addWidget(set_start_button)
+        timing_actions_row.addWidget(set_end_button)
+        timing_actions_row.addWidget(self.nudge_menu_button)
+        timing_actions_row.addStretch(1)
+        timing_actions_row.addWidget(self.cue_current_time_label)
+        detail_layout.addLayout(timing_actions_row)
+
         text_editor_header = QHBoxLayout()
         text_editor_header.setSpacing(8)
-        text_editor_label = QLabel("Text / line breaks")
+        text_editor_label = QLabel("Subtitle text / manual line breaks")
         text_editor_label.setMinimumWidth(0)
         text_editor_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         text_editor_header.addWidget(text_editor_label, 1)
+        apply_timing_button = QPushButton("Apply Timing")
+        apply_timing_button.setProperty("variant", "secondary")
+        apply_timing_button.clicked.connect(self.apply_cue_detail_edits)
         apply_text_button = QPushButton("Apply Text")
         apply_text_button.setProperty("variant", "secondary")
         apply_text_button.clicked.connect(self.apply_text_editor_to_selected)
+        text_editor_header.addWidget(apply_timing_button)
         text_editor_header.addWidget(apply_text_button)
-        text_editor_row.addLayout(text_editor_header)
+        detail_layout.addLayout(text_editor_header)
 
         self.subtitle_text_editor = QTextEdit()
         self.subtitle_text_editor.setPlaceholderText("Edit selected subtitle text here. Press Enter for a manual line break.")
-        self.subtitle_text_editor.setFixedHeight(120)
-        self.subtitle_text_editor.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self.subtitle_text_editor.setMinimumHeight(38)
+        self.subtitle_text_editor.setFixedHeight(self._subtitle_text_editor_height)
+        self.subtitle_text_editor.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.subtitle_text_editor.textChanged.connect(self._subtitle_text_editor_changed)
-        text_editor_row.addWidget(self.subtitle_text_editor)
-        layout.addLayout(text_editor_row)
+        detail_layout.addWidget(self.subtitle_text_editor)
+        self.subtitle_text_resize_bar = TextEditorResizeBar()
+        self.subtitle_text_resize_bar.dragStarted.connect(self._start_subtitle_text_resize)
+        self.subtitle_text_resize_bar.dragMoved.connect(self._resize_subtitle_text_editor)
+        detail_layout.addWidget(self.subtitle_text_resize_bar)
+        layout.addWidget(detail_panel)
+
+        self.cue_start_edit.editingFinished.connect(self.apply_cue_detail_edits)
+        self.cue_end_edit.editingFinished.connect(self.apply_cue_detail_edits)
+        self.cue_duration_spin.editingFinished.connect(self.apply_cue_duration_edit)
+        self.preview_widget.player.positionChanged.connect(self._sync_current_time_from_preview)
+        self.preview_widget.position_slider.sliderMoved.connect(self._sync_current_time_from_preview)
+        self._install_subtitle_editor_shortcuts(group)
+        self._sync_current_time_from_preview(self.preview_widget.player.position())
 
         return group
+
+    def _build_nudge_menu(self) -> QMenu:
+        menu = QMenu(self)
+        groups = [
+            ("Move selected cue", "move", [(-0.5, "Earlier 0.5s"), (-0.1, "Earlier 0.1s"), (0.1, "Later 0.1s"), (0.5, "Later 0.5s")]),
+            ("Adjust start only", "start", [(-0.5, "Start -0.5s"), (-0.1, "Start -0.1s"), (0.1, "Start +0.1s"), (0.5, "Start +0.5s")]),
+            ("Adjust end only", "end", [(-0.5, "End -0.5s"), (-0.1, "End -0.1s"), (0.1, "End +0.1s"), (0.5, "End +0.5s")]),
+        ]
+        for group_index, (title, mode, actions) in enumerate(groups):
+            if group_index:
+                menu.addSeparator()
+            heading = menu.addAction(title)
+            heading.setEnabled(False)
+            for seconds, text in actions:
+                action = menu.addAction(text)
+                action.triggered.connect(lambda checked=False, nudge_mode=mode, delta=seconds: self.nudge_selected_cues(nudge_mode, delta))
+        return menu
+
+    def _sync_current_time_from_preview(self, position_ms: int) -> None:
+        position_ms = max(0, int(position_ms))
+        self._current_playhead_ms = position_ms
+        self.cue_current_time_label.setText(f"Current: {format_timecode(position_ms / 1000.0)}")
+
+    def _start_subtitle_table_resize(self) -> None:
+        self._subtitle_table_resize_start_height = self._subtitle_table_height
+
+    def _resize_subtitle_table(self, delta_y: int) -> None:
+        self._set_subtitle_table_height(self._subtitle_table_resize_start_height + delta_y)
+
+    def _set_subtitle_table_height(self, height: int) -> None:
+        self._subtitle_table_height = max(96, min(900, int(height)))
+        self.subtitle_table.setFixedHeight(self._subtitle_table_height)
+        self.subtitle_table.updateGeometry()
+
+    def _start_subtitle_text_resize(self) -> None:
+        self._subtitle_text_editor_resize_start_height = self._subtitle_text_editor_height
+
+    def _resize_subtitle_text_editor(self, delta_y: int) -> None:
+        self._set_subtitle_text_editor_height(self._subtitle_text_editor_resize_start_height + delta_y)
+
+    def _set_subtitle_text_editor_height(self, height: int) -> None:
+        self._subtitle_text_editor_height = max(38, min(360, int(height)))
+        self.subtitle_text_editor.setFixedHeight(self._subtitle_text_editor_height)
+        self.subtitle_text_editor.updateGeometry()
+
+    def _install_subtitle_editor_shortcuts(self, parent: QWidget) -> None:
+        shortcuts = [
+            ("Alt+Left", lambda: self.nudge_selected_cues("move", -0.1)),
+            ("Alt+Right", lambda: self.nudge_selected_cues("move", 0.1)),
+            ("Alt+Shift+Left", lambda: self.nudge_selected_cues("start", -0.1)),
+            ("Alt+Shift+Right", lambda: self.nudge_selected_cues("end", 0.1)),
+            ("Ctrl+M", self.merge_selected_with_next),
+            ("Ctrl+Shift+M", self.merge_selected_with_previous),
+            ("Ctrl+/", self.split_selected_cue),
+        ]
+        self._subtitle_editor_shortcuts = []
+        for sequence, callback in shortcuts:
+            shortcut = QShortcut(QKeySequence(sequence), parent)
+            shortcut.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
+            shortcut.activated.connect(callback)
+            self._subtitle_editor_shortcuts.append(shortcut)
 
     def _build_cue_style_group(self) -> CollapsibleSection:
         content = QWidget()
@@ -1087,6 +1420,12 @@ class MainWindow(QMainWindow):
         self.cue_font_size_spin = QSpinBox()
         self.cue_font_size_spin.setRange(8, 180)
         cue_style_form.addRow("Font size", self.cue_font_size_spin)
+
+        self.cue_line_spacing_spin = QSpinBox()
+        self.cue_line_spacing_spin.setRange(-40, 80)
+        self.cue_line_spacing_spin.setSuffix(" px")
+        self.cue_line_spacing_spin.setToolTip("Use negative values to tighten the gap between subtitle lines.")
+        cue_style_form.addRow("Line spacing", self.cue_line_spacing_spin)
 
         self.cue_max_width_spin = QSpinBox()
         self.cue_max_width_spin.setRange(20, 100)
@@ -1231,9 +1570,10 @@ class MainWindow(QMainWindow):
         form.addRow("Custom safe area", self.custom_safe_spin)
 
         self.line_spacing_spin = QSpinBox()
-        self.line_spacing_spin.setRange(0, 80)
+        self.line_spacing_spin.setRange(-40, 80)
         self.line_spacing_spin.setValue(4)
         self.line_spacing_spin.setSuffix(" px")
+        self.line_spacing_spin.setToolTip("Adjust vertical space between subtitle lines. Use negative values to pull lines closer together.")
         form.addRow("Line spacing", self.line_spacing_spin)
 
         self.max_width_spin = QSpinBox()
@@ -1372,6 +1712,7 @@ class MainWindow(QMainWindow):
 
         cue_widgets = [
             self.cue_font_size_spin,
+            self.cue_line_spacing_spin,
             self.cue_max_width_spin,
             self.cue_custom_x_spin,
             self.cue_custom_y_spin,
@@ -1545,24 +1886,39 @@ class MainWindow(QMainWindow):
         self.subtitle_table.setRowCount(len(cues))
         for row, cue in enumerate(cues):
             self._set_subtitle_row(row, cue)
-        self.subtitle_table.resizeColumnsToContents()
-        self.subtitle_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
+        self._resize_subtitle_table_rows()
+        self.subtitle_table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.Stretch)
         self._updating_table = False
 
     def _set_subtitle_row(self, row: int, cue: SubtitleCue) -> None:
-        values = [cue.index, cue.start_label, cue.end_label, cue.text]
+        values = [cue.index, cue.start_label, cue.end_label, pretty_duration(cue.end - cue.start), cue.text]
         for col, value in enumerate(values):
-            editable = col != 0
+            editable = col in {1, 2, 4}
             item = self._table_item(str(value), editable=editable)
             if col == 0:
                 item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            elif col in {1, 2, 3}:
+                item.setTextAlignment(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter)
+            else:
+                item.setTextAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
             self.subtitle_table.setItem(row, col, item)
+        self.subtitle_table.setRowHeight(row, self._subtitle_row_height(cue.text))
 
     def _table_item(self, value: str, *, editable: bool) -> QTableWidgetItem:
         item = QTableWidgetItem(value)
+        item.setToolTip(value)
         if not editable:
             item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
         return item
+
+    def _resize_subtitle_table_rows(self) -> None:
+        for row in range(self.subtitle_table.rowCount()):
+            text = self._table_text(row, 4)
+            self.subtitle_table.setRowHeight(row, self._subtitle_row_height(text))
+
+    def _subtitle_row_height(self, text: str) -> int:
+        line_count = max(1, min(3, text.count("\n") + 1))
+        return 54 + ((line_count - 1) * 22)
 
     def apply_table_edits(self) -> None:
         if self._sync_subtitles_from_table(show_errors=True):
@@ -1574,9 +1930,162 @@ class MainWindow(QMainWindow):
         if row < 0:
             self._show_error("Subtitle Text", "กรุณาเลือก subtitle ที่ต้องการแก้ก่อน")
             return
-        self._set_table_text(row, 3, self.subtitle_text_editor.toPlainText().strip())
+        self._set_table_text(row, 4, self.subtitle_text_editor.toPlainText().strip())
         self.apply_table_edits()
         self.preview_selected_subtitle()
+
+    def apply_cue_detail_edits(self) -> None:
+        if self._updating_cue_detail:
+            return
+        row = self.subtitle_table.currentRow()
+        if row < 0:
+            return
+        try:
+            start = parse_timecode(self.cue_start_edit.text())
+            end = parse_timecode(self.cue_end_edit.text())
+        except Exception as exc:
+            self._show_error("Cue Timing", f"Invalid cue timing: {exc}")
+            self._load_current_cue_to_detail()
+            return
+        if end <= start:
+            self._show_error("Cue Timing", "End time must be greater than start time.")
+            self._load_current_cue_to_detail()
+            return
+        self._set_table_text(row, 1, format_timecode(start))
+        self._set_table_text(row, 2, format_timecode(end))
+        self._set_table_text(row, 3, pretty_duration(end - start))
+        if self._sync_subtitles_from_table(show_errors=True):
+            self._refresh_preview_data()
+            self.subtitle_table.selectRow(row)
+            self.preview_selected_subtitle()
+            self.log(f"Updated cue {row + 1} timing.")
+
+    def apply_cue_duration_edit(self) -> None:
+        if self._updating_cue_detail:
+            return
+        row = self.subtitle_table.currentRow()
+        if row < 0:
+            return
+        try:
+            start = parse_timecode(self.cue_start_edit.text())
+        except Exception:
+            self._load_current_cue_to_detail()
+            return
+        duration = max(0.05, float(self.cue_duration_spin.value()))
+        end = start + duration
+        if self.video_info and self.video_info.duration > 0:
+            end = min(self.video_info.duration, end)
+        self.cue_end_edit.setText(format_timecode(end))
+        self.apply_cue_detail_edits()
+
+    def set_selected_cue_time_from_playhead(self, target: str) -> None:
+        row = self.subtitle_table.currentRow()
+        if row < 0:
+            self._show_error("Cue Timing", "Please select a subtitle cue first.")
+            return
+        current = max(0, self._current_playhead_ms) / 1000.0
+        try:
+            start = parse_timecode(self.cue_start_edit.text())
+            end = parse_timecode(self.cue_end_edit.text())
+        except Exception:
+            cue = self._cue_from_table_row(row, show_errors=False)
+            if cue is None:
+                self._show_error("Cue Timing", "Selected cue timing is invalid.")
+                return
+            start, end = cue.start, cue.end
+
+        min_len = 0.05
+        if target == "start":
+            if current >= end - min_len:
+                self._show_error("Cue Timing", "Current time must be before the cue end.")
+                return
+            self.cue_start_edit.setText(format_timecode(current))
+        elif target == "end":
+            if current <= start + min_len:
+                self._show_error("Cue Timing", "Current time must be after the cue start.")
+                return
+            self.cue_end_edit.setText(format_timecode(current))
+        else:
+            return
+        self.apply_cue_detail_edits()
+
+    def nudge_selected_cues(self, mode: str, delta: float) -> None:
+        if not self._sync_subtitles_from_table(show_errors=True) or not self.subtitle_doc:
+            return
+        rows = self._selected_subtitle_rows()
+        if not rows:
+            self._show_error("Cue Timing", "Please select at least one subtitle cue.")
+            return
+        max_duration = self.video_info.duration if self.video_info and self.video_info.duration > 0 else None
+        min_len = 0.05
+        for row in rows:
+            if row >= len(self.subtitle_doc.cues):
+                continue
+            cue = self.subtitle_doc.cues[row]
+            if mode == "move":
+                shift = delta
+                if cue.start + shift < 0:
+                    shift = -cue.start
+                if max_duration is not None and cue.end + shift > max_duration:
+                    shift = max_duration - cue.end
+                cue.start = max(0.0, cue.start + shift)
+                cue.end = max(cue.start + min_len, cue.end + shift)
+            elif mode == "start":
+                cue.start = max(0.0, min(cue.end - min_len, cue.start + delta))
+            elif mode == "end":
+                cue.end = max(cue.start + min_len, cue.end + delta)
+                if max_duration is not None:
+                    cue.end = min(max_duration, cue.end)
+                    cue.end = max(cue.start + min_len, cue.end)
+        self._replace_subtitle_cues(self.subtitle_doc.cues, select_row=rows[0])
+        self.log(f"Nudged {len(rows)} cue(s): {mode} {delta:+.3f}s.")
+
+    def split_selected_cue(self) -> None:
+        if not self._sync_subtitles_from_table(show_errors=True) or not self.subtitle_doc:
+            return
+        row = self.subtitle_table.currentRow()
+        if row < 0 or row >= len(self.subtitle_doc.cues):
+            self._show_error("Split Cue", "Please select a subtitle cue first.")
+            return
+        cue = self.subtitle_doc.cues[row]
+        playhead = max(0, self._current_playhead_ms) / 1000.0
+        split_at = playhead if cue.start + 0.1 < playhead < cue.end - 0.1 else cue.start + ((cue.end - cue.start) / 2)
+        first_text, second_text = self._split_text_for_cue(cue.text)
+        cues = list(self.subtitle_doc.cues)
+        cues[row] = SubtitleCue(cue.index, cue.start, split_at, first_text, style_overrides=dict(cue.style_overrides))
+        cues.insert(row + 1, SubtitleCue(cue.index + 1, split_at, cue.end, second_text, style_overrides=dict(cue.style_overrides)))
+        self._replace_subtitle_cues(cues, select_row=row + 1)
+        self.log(f"Split cue {row + 1} at {format_timecode(split_at)}.")
+
+    def merge_selected_with_previous(self) -> None:
+        self._merge_selected_cue(-1)
+
+    def merge_selected_with_next(self) -> None:
+        self._merge_selected_cue(1)
+
+    def _merge_selected_cue(self, direction: int) -> None:
+        if not self._sync_subtitles_from_table(show_errors=True) or not self.subtitle_doc:
+            return
+        row = self.subtitle_table.currentRow()
+        other = row + direction
+        if row < 0 or other < 0 or other >= len(self.subtitle_doc.cues):
+            self._show_error("Merge Cue", "No adjacent cue is available to merge.")
+            return
+        first_index, second_index = sorted((row, other))
+        first = self.subtitle_doc.cues[first_index]
+        second = self.subtitle_doc.cues[second_index]
+        merged = SubtitleCue(
+            first.index,
+            min(first.start, second.start),
+            max(first.end, second.end),
+            f"{first.text.rstrip()}\n{second.text.lstrip()}",
+            style_overrides=dict(first.style_overrides or second.style_overrides),
+        )
+        cues = list(self.subtitle_doc.cues)
+        cues[first_index] = merged
+        del cues[second_index]
+        self._replace_subtitle_cues(cues, select_row=first_index)
+        self.log(f"Merged cues {first_index + 1} and {second_index + 1}.")
 
     def add_subtitle_row(self) -> None:
         self._sync_subtitles_from_table(show_errors=False)
@@ -1748,9 +2257,11 @@ class MainWindow(QMainWindow):
             return
         row = self.subtitle_table.currentRow()
         if row < 0:
+            self._load_current_cue_to_detail()
             return
         cue = self._cue_from_table_row(row, show_errors=False)
         if cue:
+            self._load_current_cue_to_detail(cue, row)
             self._load_selected_text_to_editor(cue.text)
             self._load_selected_style_to_controls(cue)
             if not self._selecting_from_playback:
@@ -1766,9 +2277,78 @@ class MainWindow(QMainWindow):
         self._selecting_from_playback = True
         with QSignalBlocker(self.subtitle_table):
             self.subtitle_table.selectRow(row)
+            item = self.subtitle_table.item(row, 0)
+            if item is not None:
+                self.subtitle_table.scrollToItem(item, QAbstractItemView.ScrollHint.PositionAtCenter)
         self._load_selected_text_to_editor(cue.text)
+        self._load_current_cue_to_detail(cue, row)
         self._load_selected_style_to_controls(cue)
         self._selecting_from_playback = False
+
+    def _load_current_cue_to_detail(self, cue: SubtitleCue | None = None, row: int | None = None) -> None:
+        if row is None:
+            row = self.subtitle_table.currentRow()
+        if cue is None and row is not None and row >= 0:
+            cue = self._cue_from_table_row(row, show_errors=False)
+        self._updating_cue_detail = True
+        blockers = [
+            QSignalBlocker(self.cue_start_edit),
+            QSignalBlocker(self.cue_end_edit),
+            QSignalBlocker(self.cue_duration_spin),
+        ]
+        if cue is None or row is None or row < 0:
+            self.cue_start_edit.clear()
+            self.cue_end_edit.clear()
+            self.cue_duration_spin.setValue(0.05)
+            self.cue_detail_status_label.setText("No cue selected")
+        else:
+            self.cue_start_edit.setText(format_timecode(cue.start))
+            self.cue_end_edit.setText(format_timecode(cue.end))
+            self.cue_duration_spin.setValue(max(0.05, cue.end - cue.start))
+            self.cue_detail_status_label.setText(f"Cue {row + 1} | {pretty_duration(cue.end - cue.start)}")
+        del blockers
+        self._updating_cue_detail = False
+
+    def _selected_subtitle_rows(self) -> list[int]:
+        rows = sorted({index.row() for index in self.subtitle_table.selectedIndexes()})
+        if not rows and self.subtitle_table.currentRow() >= 0:
+            rows = [self.subtitle_table.currentRow()]
+        return rows
+
+    def _replace_subtitle_cues(self, cues: list[SubtitleCue], *, select_row: int = 0) -> None:
+        source_format = self.subtitle_doc.source_format if self.subtitle_doc else "edited"
+        normalized = [
+            SubtitleCue(index + 1, cue.start, cue.end, cue.text, style_overrides=dict(cue.style_overrides))
+            for index, cue in enumerate(cues)
+        ]
+        self.subtitle_doc = SubtitleDocument(cues=normalized, source_format=source_format)
+        self._populate_subtitle_table()
+        if normalized:
+            self.subtitle_table.selectRow(max(0, min(select_row, len(normalized) - 1)))
+        else:
+            self.subtitle_text_editor.clear()
+            self._load_current_cue_to_detail(None, -1)
+        self._refresh_preview_data()
+        if normalized:
+            self.preview_widget.set_sample_cue(normalized[max(0, min(select_row, len(normalized) - 1))])
+        self._update_summary()
+        self._push_history()
+
+    def _split_text_for_cue(self, text: str) -> tuple[str, str]:
+        clean = text.strip()
+        if "\n" in clean:
+            parts = clean.splitlines()
+            midpoint = max(1, len(parts) // 2)
+            return "\n".join(parts[:midpoint]).strip(), "\n".join(parts[midpoint:]).strip() or parts[-1].strip()
+        midpoint = len(clean) // 2
+        split_at = clean.rfind(" ", 0, midpoint)
+        if split_at < max(4, midpoint // 2):
+            split_at = clean.find(" ", midpoint)
+        if split_at <= 0:
+            split_at = midpoint
+        first = clean[:split_at].strip()
+        second = clean[split_at:].strip()
+        return first or clean, second or clean
 
     def render_accurate_preview(self, position_ms: int) -> None:
         if not self.video_info:
@@ -1914,7 +2494,13 @@ class MainWindow(QMainWindow):
         if self.speech_thread is not None:
             self._show_error("Auto Speech Sync", "Speech sync is already running.")
             return
+        source_cues: list[SubtitleCue] = []
+        if self.subtitle_table.rowCount() > 0:
+            if not self._sync_subtitles_from_table(show_errors=True):
+                return
+            source_cues = list(self.subtitle_doc.cues if self.subtitle_doc else [])
 
+        style = self.current_style()
         options = SpeechSyncOptions(
             model_size=self.speech_model_combo.currentText(),
             language=str(self.speech_language_combo.currentData()) or None,
@@ -1927,16 +2513,24 @@ class MainWindow(QMainWindow):
             max_duration=min(float(self.max_display_spin.value()), 4.5),
             max_words_per_cue=10 if self.video_info.orientation == "portrait" else 12,
             target_chars_per_second=13.0 if self.video_info.orientation == "portrait" else 15.0,
+            max_chars_per_line=34 if self.video_info.orientation == "portrait" else 42,
+            max_lines=max(1, int(self.max_lines_spin.value())),
+            preserve_source_text=bool(self.speech_preserve_source_check.isChecked()),
+            conservative_alignment=True,
         )
         self.progress_bar.setValue(0)
         self.speech_sync_button.setEnabled(False)
-        self.log("Starting Auto Speech Sync. This may take a while the first time because the Whisper model may download.")
+        if source_cues and options.preserve_source_text:
+            self.log(f"Starting Auto Speech Sync with protected source text ({len(source_cues)} cue(s)).")
+        else:
+            self.log("Starting Auto Speech Sync. This may take a while the first time because the Whisper model may download.")
 
         self.speech_thread = QThread(self)
         self.speech_worker = SpeechSyncWorker(
             video_info=self.video_info,
-            style=self.current_style(),
+            style=style,
             options=options,
+            source_cues=source_cues,
         )
         self.speech_worker.moveToThread(self.speech_thread)
         self.speech_thread.started.connect(self.speech_worker.run)
@@ -1950,8 +2544,17 @@ class MainWindow(QMainWindow):
         self.speech_thread.finished.connect(self._speech_sync_thread_finished)
         self.speech_thread.start()
 
-    def _speech_sync_finished(self, cues: object) -> None:
-        generated = list(cues) if isinstance(cues, list) else []
+    def _speech_sync_finished(self, result: object) -> None:
+        if isinstance(result, SpeechSyncResult):
+            generated = list(result.cues)
+            quality_notes = list(result.quality_notes)
+            mode = result.mode
+            source_preserved = result.source_preserved
+        else:
+            generated = list(result) if isinstance(result, list) else []
+            quality_notes = []
+            mode = "legacy"
+            source_preserved = False
         if not generated:
             self._speech_sync_failed("Speech Sync finished but did not generate subtitle cues.")
             return
@@ -1963,7 +2566,15 @@ class MainWindow(QMainWindow):
         self._update_summary()
         self._push_history()
         self.progress_bar.setValue(100)
-        self.log(f"Auto Speech Sync generated {len(generated)} subtitle cue(s). Review/edit before export.")
+        if mode == "source_alignment":
+            status = "preserved" if source_preserved else "needs review"
+            self.log(f"Auto Speech Sync aligned {len(generated)} cue(s) from source text. Source text: {status}.")
+        else:
+            self.log(f"Auto Speech Sync generated {len(generated)} subtitle cue(s) from ASR. Review/edit before export.")
+        for note in quality_notes[:12]:
+            self.log(f"Speech Sync quality: {note}")
+        if len(quality_notes) > 12:
+            self.log(f"Speech Sync quality: {len(quality_notes) - 12} more issue(s) hidden.")
 
     def _speech_sync_failed(self, message: str) -> None:
         self.log(f"Auto Speech Sync failed: {message}")
@@ -1976,12 +2587,15 @@ class MainWindow(QMainWindow):
 
     def auto_arrange_subtitle_text(self) -> None:
         if not self.video_info:
-            self._show_error("Auto Arrange Text", "กรุณาเลือกวิดีโอก่อน เพื่อคำนวณจากขนาดวิดีโอจริง")
+            self._show_error(
+                "Auto Arrange Text",
+                "Please select a video first so Smart Subtitle can arrange text using the real video size.",
+            )
             return
         if not self._sync_subtitles_from_table(show_errors=True):
             return
         if not self.subtitle_doc or not self.subtitle_doc.cues:
-            self._show_error("Auto Arrange Text", "ยังไม่มี subtitle ให้จัดข้อความ")
+            self._show_error("Auto Arrange Text", "There are no subtitles to arrange.")
             return
 
         readability_notes = self._apply_auto_readability_settings()
@@ -2159,10 +2773,20 @@ class MainWindow(QMainWindow):
         source_format = self.subtitle_doc.source_format if self.subtitle_doc else "edited"
         self.subtitle_doc = SubtitleDocument(cues=cues, source_format=source_format)
         self._renumber_table()
+        self._refresh_table_timing_columns(cues)
         self._update_summary()
         self._refresh_preview_data()
         self._push_history()
         return True
+
+    def _refresh_table_timing_columns(self, cues: list[SubtitleCue]) -> None:
+        self._updating_table = True
+        for row, cue in enumerate(cues):
+            self._set_table_text(row, 1, cue.start_label)
+            self._set_table_text(row, 2, cue.end_label)
+            self._set_table_text(row, 3, pretty_duration(cue.end - cue.start))
+            self.subtitle_table.setRowHeight(row, self._subtitle_row_height(cue.text))
+        self._updating_table = False
 
     def _subtitle_table_changed(self, item: QTableWidgetItem) -> None:
         del item
@@ -2178,7 +2802,7 @@ class MainWindow(QMainWindow):
         row = self.subtitle_table.currentRow()
         if row < 0:
             return
-        self._set_table_text(row, 3, self.subtitle_text_editor.toPlainText().rstrip("\n"))
+        self._set_table_text(row, 4, self.subtitle_text_editor.toPlainText().rstrip("\n"))
         self._sync_subtitles_from_table(show_errors=False)
         self._refresh_preview_data()
         if self.subtitle_doc and 0 <= row < len(self.subtitle_doc.cues):
@@ -2195,6 +2819,7 @@ class MainWindow(QMainWindow):
             QSignalBlocker(self.cue_custom_x_spin),
             QSignalBlocker(self.cue_custom_y_spin),
             QSignalBlocker(self.cue_font_size_spin),
+            QSignalBlocker(self.cue_line_spacing_spin),
             QSignalBlocker(self.cue_max_width_spin),
             QSignalBlocker(self.cue_alignment_offset_mode_combo),
             QSignalBlocker(self.cue_horizontal_margin_spin),
@@ -2206,6 +2831,7 @@ class MainWindow(QMainWindow):
         self.cue_custom_x_spin.setValue(style.custom_x_percent)
         self.cue_custom_y_spin.setValue(style.custom_y_percent)
         self.cue_font_size_spin.setValue(style.font_size)
+        self.cue_line_spacing_spin.setValue(style.line_spacing)
         self.cue_max_width_spin.setValue(style.max_width_percent)
         cue_offset_manual = style.horizontal_margin > 0 or style.bottom_margin > 0
         self._set_combo_data(self.cue_alignment_offset_mode_combo, "manual" if cue_offset_manual else "auto")
@@ -2239,6 +2865,7 @@ class MainWindow(QMainWindow):
                     "custom_x_percent": int(self.cue_custom_x_spin.value()),
                     "custom_y_percent": int(self.cue_custom_y_spin.value()),
                     "font_size": int(self.cue_font_size_spin.value()),
+                    "line_spacing": int(self.cue_line_spacing_spin.value()),
                     "max_width_percent": int(self.cue_max_width_spin.value()),
                     "horizontal_margin": 0
                     if str(self.cue_alignment_offset_mode_combo.currentData()) == "auto"
@@ -2276,6 +2903,7 @@ class MainWindow(QMainWindow):
             self.cue_custom_x_spin,
             self.cue_custom_y_spin,
             self.cue_font_size_spin,
+            self.cue_line_spacing_spin,
             self.cue_max_width_spin,
             self.cue_alignment_offset_mode_combo,
             self.cue_horizontal_margin_spin,
@@ -2313,7 +2941,9 @@ class MainWindow(QMainWindow):
             item = self._table_item("", editable=True)
             self.subtitle_table.setItem(row, col, item)
         item.setText(text)
-        self.subtitle_table.resizeRowToContents(row)
+        item.setToolTip(text)
+        if col == 4:
+            self.subtitle_table.setRowHeight(row, self._subtitle_row_height(text))
         self._updating_table = False
 
     def _refresh_preview_data(self) -> None:
@@ -2326,7 +2956,7 @@ class MainWindow(QMainWindow):
         del show_errors
         start_text = self._table_text(row, 1)
         end_text = self._table_text(row, 2)
-        text = self._table_text(row, 3).strip()
+        text = self._table_text(row, 4).strip()
         if not start_text and not end_text and not text:
             return None
         try:
@@ -2426,7 +3056,10 @@ class MainWindow(QMainWindow):
 
     def apply_auto_size(self) -> None:
         if not self.video_info:
-            self._show_error("Auto Size", "กรุณาเลือกวิดีโอก่อน เพื่อคำนวณ font size จาก resolution จริง")
+            self._show_error(
+                "Auto Size",
+                "Please select a video first so Smart Subtitle can calculate font size from the real resolution.",
+            )
             return
         style = style_with_auto_size(self.current_style(), self.video_info)
         self._load_style_to_controls(style)
@@ -2434,7 +3067,7 @@ class MainWindow(QMainWindow):
 
     def generate_video(self) -> None:
         if not self.video_info:
-            self._show_error("Export Error", "กรุณาเลือกวิดีโอก่อน")
+            self._show_error("Export Error", "Please select a video first.")
             return
         if not self.subtitle_doc:
             self.parse_subtitles()
@@ -2445,7 +3078,7 @@ class MainWindow(QMainWindow):
 
         output_path = self.output_path_edit.text().strip()
         if not output_path:
-            self._show_error("Export Error", "กรุณาเลือก output path")
+            self._show_error("Export Error", "Please choose an output path.")
             return
 
         if not self._confirm_overwrite(Path(output_path), "Output video"):
@@ -2491,12 +3124,12 @@ class MainWindow(QMainWindow):
             if self.subtitle_path_edit.text().strip():
                 self.parse_subtitles()
         if not self.subtitle_doc:
-            self._show_error("Export Subtitle", "ยังไม่มี subtitle ให้ export")
+            self._show_error("Export Subtitle", "There are no subtitles to export.")
             return
         if not self._sync_subtitles_from_table(show_errors=True):
             return
         if not self.subtitle_doc or not self.subtitle_doc.cues:
-            self._show_error("Export Subtitle", "ยังไม่มี subtitle ให้ export")
+            self._show_error("Export Subtitle", "There are no subtitles to export.")
             return
 
         default_name = "edited_subtitle.srt"
@@ -2536,7 +3169,7 @@ class MainWindow(QMainWindow):
             return
 
         self.log(f"Exported edited subtitle: {target}")
-        QMessageBox.information(self, "Subtitle Exported", f"บันทึก subtitle แล้ว:\n{target}")
+        QMessageBox.information(self, "Subtitle Exported", f"Subtitle file saved:\n{target}")
 
     def _subtitle_suffix_from_filter(self, selected_filter: str) -> str:
         lowered = selected_filter.lower()

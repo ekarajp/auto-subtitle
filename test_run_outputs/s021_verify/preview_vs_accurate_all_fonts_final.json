@@ -1,0 +1,578 @@
+{
+  "video": "E:\\Curiosity Channel\\000_Short\\S021 Longus and teeth evident of evolution\\S021_1.mp4",
+  "subtitle": "E:\\Curiosity Channel\\000_Short\\S021 Longus and teeth evident of evolution\\S021_1_edited.srt",
+  "summary": {
+    "Tahoma": {
+      "max_abs_dx": 1.0,
+      "max_abs_dy": 9.0,
+      "max_abs_width_diff": 9,
+      "max_abs_height_diff": 14
+    },
+    "Noto Sans Thai": {
+      "max_abs_dx": 1.0,
+      "max_abs_dy": 14.0,
+      "max_abs_width_diff": 28,
+      "max_abs_height_diff": 15
+    },
+    "Leelawadee UI": {
+      "max_abs_dx": 1.0,
+      "max_abs_dy": 12.5,
+      "max_abs_width_diff": 23,
+      "max_abs_height_diff": 8
+    },
+    "Arial": {
+      "max_abs_dx": 1.0,
+      "max_abs_dy": 14.0,
+      "max_abs_width_diff": 28,
+      "max_abs_height_diff": 15
+    },
+    "Segoe UI": {
+      "max_abs_dx": 1.5,
+      "max_abs_dy": 14.0,
+      "max_abs_width_diff": 28,
+      "max_abs_height_diff": 15
+    }
+  },
+  "samples": {
+    "Tahoma": {
+      "max_abs_dx": 1.0,
+      "max_abs_dy": 9.0,
+      "max_abs_width_diff": 9,
+      "max_abs_height_diff": 14,
+      "samples": [
+        {
+          "font": "Tahoma",
+          "cue_index": 1,
+          "preview_bbox": [
+            12,
+            1473,
+            1067,
+            1676
+          ],
+          "accurate_bbox": [
+            17,
+            1474,
+            1063,
+            1691
+          ],
+          "dx": -0.5,
+          "dy": -8.0,
+          "width_diff": 9,
+          "height_diff": -14
+        },
+        {
+          "font": "Tahoma",
+          "cue_index": 8,
+          "preview_bbox": [
+            48,
+            1490,
+            1031,
+            1694
+          ],
+          "accurate_bbox": [
+            53,
+            1493,
+            1028,
+            1691
+          ],
+          "dx": -1.0,
+          "dy": 0.0,
+          "width_diff": 8,
+          "height_diff": 6
+        },
+        {
+          "font": "Tahoma",
+          "cue_index": 16,
+          "preview_bbox": [
+            207,
+            1480,
+            872,
+            1691
+          ],
+          "accurate_bbox": [
+            208,
+            1489,
+            869,
+            1700
+          ],
+          "dx": 1.0,
+          "dy": -9.0,
+          "width_diff": 4,
+          "height_diff": 0
+        },
+        {
+          "font": "Tahoma",
+          "cue_index": 24,
+          "preview_bbox": [
+            109,
+            1614,
+            970,
+            1687
+          ],
+          "accurate_bbox": [
+            114,
+            1617,
+            967,
+            1691
+          ],
+          "dx": -1.0,
+          "dy": -3.5,
+          "width_diff": 8,
+          "height_diff": -1
+        },
+        {
+          "font": "Tahoma",
+          "cue_index": 32,
+          "preview_bbox": [
+            94,
+            1606,
+            985,
+            1695
+          ],
+          "accurate_bbox": [
+            97,
+            1602,
+            981,
+            1692
+          ],
+          "dx": 0.5,
+          "dy": 3.5,
+          "width_diff": 7,
+          "height_diff": -1
+        }
+      ]
+    },
+    "Noto Sans Thai": {
+      "max_abs_dx": 1.0,
+      "max_abs_dy": 14.0,
+      "max_abs_width_diff": 28,
+      "max_abs_height_diff": 15,
+      "samples": [
+        {
+          "font": "Noto Sans Thai",
+          "cue_index": 1,
+          "preview_bbox": [
+            102,
+            1482,
+            977,
+            1673
+          ],
+          "accurate_bbox": [
+            107,
+            1489,
+            973,
+            1689
+          ],
+          "dx": -0.5,
+          "dy": -11.5,
+          "width_diff": 9,
+          "height_diff": -9
+        },
+        {
+          "font": "Noto Sans Thai",
+          "cue_index": 8,
+          "preview_bbox": [
+            131,
+            1497,
+            948,
+            1688
+          ],
+          "accurate_bbox": [
+            145,
+            1489,
+            934,
+            1689
+          ],
+          "dx": 0.0,
+          "dy": 3.5,
+          "width_diff": 28,
+          "height_diff": -9
+        },
+        {
+          "font": "Noto Sans Thai",
+          "cue_index": 16,
+          "preview_bbox": [
+            263,
+            1489,
+            816,
+            1686
+          ],
+          "accurate_bbox": [
+            259,
+            1500,
+            819,
+            1703
+          ],
+          "dx": 0.5,
+          "dy": -14.0,
+          "width_diff": -7,
+          "height_diff": -6
+        },
+        {
+          "font": "Noto Sans Thai",
+          "cue_index": 24,
+          "preview_bbox": [
+            182,
+            1621,
+            897,
+            1682
+          ],
+          "accurate_bbox": [
+            187,
+            1613,
+            894,
+            1689
+          ],
+          "dx": -1.0,
+          "dy": 0.5,
+          "width_diff": 8,
+          "height_diff": -15
+        },
+        {
+          "font": "Noto Sans Thai",
+          "cue_index": 32,
+          "preview_bbox": [
+            170,
+            1614,
+            910,
+            1689
+          ],
+          "accurate_bbox": [
+            178,
+            1614,
+            900,
+            1689
+          ],
+          "dx": 1.0,
+          "dy": 0.0,
+          "width_diff": 18,
+          "height_diff": 0
+        }
+      ]
+    },
+    "Leelawadee UI": {
+      "max_abs_dx": 1.0,
+      "max_abs_dy": 12.5,
+      "max_abs_width_diff": 23,
+      "max_abs_height_diff": 8,
+      "samples": [
+        {
+          "font": "Leelawadee UI",
+          "cue_index": 1,
+          "preview_bbox": [
+            104,
+            1480,
+            975,
+            1673
+          ],
+          "accurate_bbox": [
+            107,
+            1489,
+            973,
+            1689
+          ],
+          "dx": -0.5,
+          "dy": -12.5,
+          "width_diff": 5,
+          "height_diff": -7
+        },
+        {
+          "font": "Leelawadee UI",
+          "cue_index": 8,
+          "preview_bbox": [
+            138,
+            1489,
+            941,
+            1688
+          ],
+          "accurate_bbox": [
+            145,
+            1489,
+            934,
+            1689
+          ],
+          "dx": 0.0,
+          "dy": -0.5,
+          "width_diff": 14,
+          "height_diff": -1
+        },
+        {
+          "font": "Leelawadee UI",
+          "cue_index": 16,
+          "preview_bbox": [
+            253,
+            1485,
+            826,
+            1696
+          ],
+          "accurate_bbox": [
+            261,
+            1500,
+            816,
+            1703
+          ],
+          "dx": 1.0,
+          "dy": -11.0,
+          "width_diff": 18,
+          "height_diff": 8
+        },
+        {
+          "font": "Leelawadee UI",
+          "cue_index": 24,
+          "preview_bbox": [
+            181,
+            1613,
+            898,
+            1688
+          ],
+          "accurate_bbox": [
+            187,
+            1613,
+            894,
+            1689
+          ],
+          "dx": -1.0,
+          "dy": -0.5,
+          "width_diff": 10,
+          "height_diff": -1
+        },
+        {
+          "font": "Leelawadee UI",
+          "cue_index": 32,
+          "preview_bbox": [
+            167,
+            1613,
+            912,
+            1688
+          ],
+          "accurate_bbox": [
+            178,
+            1614,
+            900,
+            1689
+          ],
+          "dx": 0.5,
+          "dy": -1.0,
+          "width_diff": 23,
+          "height_diff": 0
+        }
+      ]
+    },
+    "Arial": {
+      "max_abs_dx": 1.0,
+      "max_abs_dy": 14.0,
+      "max_abs_width_diff": 28,
+      "max_abs_height_diff": 15,
+      "samples": [
+        {
+          "font": "Arial",
+          "cue_index": 1,
+          "preview_bbox": [
+            102,
+            1482,
+            977,
+            1673
+          ],
+          "accurate_bbox": [
+            107,
+            1489,
+            973,
+            1689
+          ],
+          "dx": -0.5,
+          "dy": -11.5,
+          "width_diff": 9,
+          "height_diff": -9
+        },
+        {
+          "font": "Arial",
+          "cue_index": 8,
+          "preview_bbox": [
+            131,
+            1497,
+            948,
+            1688
+          ],
+          "accurate_bbox": [
+            145,
+            1489,
+            934,
+            1689
+          ],
+          "dx": 0.0,
+          "dy": 3.5,
+          "width_diff": 28,
+          "height_diff": -9
+        },
+        {
+          "font": "Arial",
+          "cue_index": 16,
+          "preview_bbox": [
+            264,
+            1489,
+            815,
+            1686
+          ],
+          "accurate_bbox": [
+            259,
+            1500,
+            819,
+            1703
+          ],
+          "dx": 0.5,
+          "dy": -14.0,
+          "width_diff": -9,
+          "height_diff": -6
+        },
+        {
+          "font": "Arial",
+          "cue_index": 24,
+          "preview_bbox": [
+            182,
+            1621,
+            897,
+            1682
+          ],
+          "accurate_bbox": [
+            187,
+            1613,
+            894,
+            1689
+          ],
+          "dx": -1.0,
+          "dy": 0.5,
+          "width_diff": 8,
+          "height_diff": -15
+        },
+        {
+          "font": "Arial",
+          "cue_index": 32,
+          "preview_bbox": [
+            170,
+            1614,
+            910,
+            1689
+          ],
+          "accurate_bbox": [
+            178,
+            1614,
+            900,
+            1689
+          ],
+          "dx": 1.0,
+          "dy": 0.0,
+          "width_diff": 18,
+          "height_diff": 0
+        }
+      ]
+    },
+    "Segoe UI": {
+      "max_abs_dx": 1.5,
+      "max_abs_dy": 14.0,
+      "max_abs_width_diff": 28,
+      "max_abs_height_diff": 15,
+      "samples": [
+        {
+          "font": "Segoe UI",
+          "cue_index": 1,
+          "preview_bbox": [
+            102,
+            1482,
+            977,
+            1673
+          ],
+          "accurate_bbox": [
+            107,
+            1489,
+            973,
+            1689
+          ],
+          "dx": -0.5,
+          "dy": -11.5,
+          "width_diff": 9,
+          "height_diff": -9
+        },
+        {
+          "font": "Segoe UI",
+          "cue_index": 8,
+          "preview_bbox": [
+            131,
+            1497,
+            948,
+            1688
+          ],
+          "accurate_bbox": [
+            145,
+            1489,
+            934,
+            1689
+          ],
+          "dx": 0.0,
+          "dy": 3.5,
+          "width_diff": 28,
+          "height_diff": -9
+        },
+        {
+          "font": "Segoe UI",
+          "cue_index": 16,
+          "preview_bbox": [
+            265,
+            1489,
+            815,
+            1686
+          ],
+          "accurate_bbox": [
+            261,
+            1500,
+            816,
+            1703
+          ],
+          "dx": 1.5,
+          "dy": -14.0,
+          "width_diff": -5,
+          "height_diff": -6
+        },
+        {
+          "font": "Segoe UI",
+          "cue_index": 24,
+          "preview_bbox": [
+            182,
+            1621,
+            897,
+            1682
+          ],
+          "accurate_bbox": [
+            187,
+            1613,
+            894,
+            1689
+          ],
+          "dx": -1.0,
+          "dy": 0.5,
+          "width_diff": 8,
+          "height_diff": -15
+        },
+        {
+          "font": "Segoe UI",
+          "cue_index": 32,
+          "preview_bbox": [
+            170,
+            1614,
+            910,
+            1689
+          ],
+          "accurate_bbox": [
+            178,
+            1614,
+            900,
+            1689
+          ],
+          "dx": 1.0,
+          "dy": 0.0,
+          "width_diff": 18,
+          "height_diff": 0
+        }
+      ]
+    }
+  }
+}

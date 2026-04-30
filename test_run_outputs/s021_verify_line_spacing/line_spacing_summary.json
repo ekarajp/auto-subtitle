@@ -1,0 +1,206 @@
+{
+  "tight_minus12": {
+    "max_preview_vs_accurate_center_dx": 1.0,
+    "max_preview_vs_accurate_center_dy": 8.0,
+    "max_accurate_vs_export_center_dx": 0.0,
+    "max_accurate_vs_export_center_dy": 0.0,
+    "samples": [
+      {
+        "cue_index": 1,
+        "time": 0.25,
+        "preview_center_delta": [
+          -0.5,
+          8.0
+        ],
+        "accurate_export_center_delta": [
+          0.0,
+          0.0
+        ]
+      },
+      {
+        "cue_index": 8,
+        "time": 14.65,
+        "preview_center_delta": [
+          -1.0,
+          -2.0
+        ],
+        "accurate_export_center_delta": [
+          0.0,
+          0.0
+        ]
+      },
+      {
+        "cue_index": 16,
+        "time": 28.19,
+        "preview_center_delta": [
+          1.0,
+          -3.5
+        ],
+        "accurate_export_center_delta": [
+          0.0,
+          0.0
+        ]
+      },
+      {
+        "cue_index": 24,
+        "time": 44.751,
+        "preview_center_delta": [
+          0.5,
+          1.5
+        ],
+        "accurate_export_center_delta": [
+          0.0,
+          0.0
+        ]
+      },
+      {
+        "cue_index": 32,
+        "time": 60.969,
+        "preview_center_delta": [
+          0.5,
+          6.0
+        ],
+        "accurate_export_center_delta": [
+          0.0,
+          0.0
+        ]
+      }
+    ]
+  },
+  "default_4": {
+    "max_preview_vs_accurate_center_dx": 1.0,
+    "max_preview_vs_accurate_center_dy": 8.0,
+    "max_accurate_vs_export_center_dx": 0.0,
+    "max_accurate_vs_export_center_dy": 0.0,
+    "samples": [
+      {
+        "cue_index": 1,
+        "time": 0.25,
+        "preview_center_delta": [
+          -0.5,
+          8.0
+        ],
+        "accurate_export_center_delta": [
+          0.0,
+          0.0
+        ]
+      },
+      {
+        "cue_index": 8,
+        "time": 14.65,
+        "preview_center_delta": [
+          -1.0,
+          -1.5
+        ],
+        "accurate_export_center_delta": [
+          0.0,
+          0.0
+        ]
+      },
+      {
+        "cue_index": 16,
+        "time": 28.19,
+        "preview_center_delta": [
+          1.0,
+          -3.5
+        ],
+        "accurate_export_center_delta": [
+          0.0,
+          0.0
+        ]
+      },
+      {
+        "cue_index": 24,
+        "time": 44.751,
+        "preview_center_delta": [
+          -0.5,
+          1.0
+        ],
+        "accurate_export_center_delta": [
+          0.0,
+          0.0
+        ]
+      },
+      {
+        "cue_index": 32,
+        "time": 60.969,
+        "preview_center_delta": [
+          0.5,
+          5.5
+        ],
+        "accurate_export_center_delta": [
+          0.0,
+          0.0
+        ]
+      }
+    ]
+  },
+  "loose_20": {
+    "max_preview_vs_accurate_center_dx": 1.0,
+    "max_preview_vs_accurate_center_dy": 8.0,
+    "max_accurate_vs_export_center_dx": 0.0,
+    "max_accurate_vs_export_center_dy": 0.0,
+    "samples": [
+      {
+        "cue_index": 1,
+        "time": 0.25,
+        "preview_center_delta": [
+          -0.5,
+          8.0
+        ],
+        "accurate_export_center_delta": [
+          0.0,
+          0.0
+        ]
+      },
+      {
+        "cue_index": 8,
+        "time": 14.65,
+        "preview_center_delta": [
+          -1.0,
+          -1.5
+        ],
+        "accurate_export_center_delta": [
+          0.0,
+          0.0
+        ]
+      },
+      {
+        "cue_index": 16,
+        "time": 28.19,
+        "preview_center_delta": [
+          1.0,
+          -3.5
+        ],
+        "accurate_export_center_delta": [
+          0.0,
+          0.0
+        ]
+      },
+      {
+        "cue_index": 24,
+        "time": 44.751,
+        "preview_center_delta": [
+          -0.5,
+          1.5
+        ],
+        "accurate_export_center_delta": [
+          0.0,
+          0.0
+        ]
+      },
+      {
+        "cue_index": 32,
+        "time": 60.969,
+        "preview_center_delta": [
+          0.5,
+          6.0
+        ],
+        "accurate_export_center_delta": [
+          0.0,
+          0.0
+        ]
+      }
+    ]
+  }
+}

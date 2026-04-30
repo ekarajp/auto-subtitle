@@ -1,0 +1,388 @@
+{
+  "video": "E:\\Curiosity Channel\\000_Short\\S021 Longus and teeth evident of evolution\\S021_1.mp4",
+  "subtitle": "E:\\Curiosity Channel\\000_Short\\S021 Longus and teeth evident of evolution\\S021_1_edited.srt",
+  "video_info": {
+    "width": 1080,
+    "height": 1920,
+    "duration": 65.533333,
+    "fps": 30.0,
+    "aspect_ratio": "9:16",
+    "orientation": "portrait"
+  },
+  "styles": {
+    "default": [
+      {
+        "cue_index": 1,
+        "time": 0.08,
+        "text": "สิ่งมีชีวิตทุกชนิดบนโลกไม่ได้ถูก\nออกแบบมา",
+        "preview_bbox": [
+          112,
+          1511,
+          967,
+          1670
+        ],
+        "accurate_bbox": [
+          17,
+          1474,
+          1063,
+          1691
+        ],
+        "export_bbox": [
+          17,
+          1442,
+          1063,
+          1691
+        ],
+        "metrics": {
+          "preview_vs_accurate": {
+            "center_dx": -0.5,
+            "center_dy": 8.0,
+            "width_diff": -191,
+            "height_diff": -58
+          },
+          "accurate_vs_export": {
+            "center_dx": 0.0,
+            "center_dy": 16.0,
+            "width_diff": 0,
+            "height_diff": -32
+          }
+        }
+      },
+      {
+        "cue_index": 8,
+        "time": 14.48,
+        "text": "อวัยวะหรือโครงสร้างบางอย่าง\nที่เคย",
+        "preview_bbox": [
+          93,
+          1511,
+          986,
+          1670
+        ],
+        "accurate_bbox": [
+          53,
+          1493,
+          1028,
+          1691
+        ],
+        "export_bbox": [
+          53,
+          1493,
+          1028,
+          1691
+        ],
+        "metrics": {
+          "preview_vs_accurate": {
+            "center_dx": -1.0,
+            "center_dy": -1.5,
+            "width_diff": -82,
+            "height_diff": -39
+          },
+          "accurate_vs_export": {
+            "center_dx": 0.0,
+            "center_dy": 0.0,
+            "width_diff": 0,
+            "height_diff": 0
+          }
+        }
+      },
+      {
+        "cue_index": 16,
+        "time": 28.02,
+        "text": "ตัวอย่างแรกก็อยู่\nใกล้ตัวเรามากๆ ครับ",
+        "preview_bbox": [
+          229,
+          1511,
+          850,
+          1670
+        ],
+        "accurate_bbox": [
+          208,
+          1488,
+          869,
+          1700
+        ],
+        "export_bbox": [
+          208,
+          1488,
+          869,
+          1700
+        ],
+        "metrics": {
+          "preview_vs_accurate": {
+            "center_dx": 1.0,
+            "center_dy": -3.5,
+            "width_diff": -40,
+            "height_diff": -53
+          },
+          "accurate_vs_export": {
+            "center_dx": 0.0,
+            "center_dy": 0.0,
+            "width_diff": 0,
+            "height_diff": 0
+          }
+        }
+      },
+      {
+        "cue_index": 24,
+        "time": 44.581,
+        "text": "เกิดมาโดยไม่มีมันแล้วครับ",
+        "preview_bbox": [
+          171,
+          1635,
+          908,
+          1670
+        ],
+        "accurate_bbox": [
+          113,
+          1617,
+          967,
+          1686
+        ],
+        "export_bbox": [
+          112,
+          1617,
+          967,
+          1686
+        ],
+        "metrics": {
+          "preview_vs_accurate": {
+            "center_dx": -0.5,
+            "center_dy": 1.0,
+            "width_diff": -117,
+            "height_diff": -34
+          },
+          "accurate_vs_export": {
+            "center_dx": 0.5,
+            "center_dy": 0.0,
+            "width_diff": -1,
+            "height_diff": 0
+          }
+        }
+      },
+      {
+        "cue_index": 32,
+        "time": 60.799,
+        "text": "ที่หลงเหลือมาจากอดีตครับ",
+        "preview_bbox": [
+          171,
+          1635,
+          908,
+          1670
+        ],
+        "accurate_bbox": [
+          97,
+          1602,
+          981,
+          1692
+        ],
+        "export_bbox": [
+          97,
+          1602,
+          981,
+          1692
+        ],
+        "metrics": {
+          "preview_vs_accurate": {
+            "center_dx": 0.5,
+            "center_dy": 5.5,
+            "width_diff": -147,
+            "height_diff": -55
+          },
+          "accurate_vs_export": {
+            "center_dx": 0.0,
+            "center_dy": 0.0,
+            "width_diff": 0,
+            "height_diff": 0
+          }
+        }
+      }
+    ],
+    "tiktok": [
+      {
+        "cue_index": 1,
+        "time": 0.08,
+        "text": "สิ่งมีชีวิตทุกชนิดบนโลกไม่ได้ถูก\nออกแบบมา",
+        "preview_bbox": [
+          61,
+          1318,
+          1017,
+          1659
+        ],
+        "accurate_bbox": [
+          0,
+          1240,
+          1079,
+          1741
+        ],
+        "export_bbox": [
+          0,
+          1240,
+          1079,
+          1741
+        ],
+        "metrics": {
+          "preview_vs_accurate": {
+            "center_dx": -0.5,
+            "center_dy": -2.0,
+            "width_diff": -123,
+            "height_diff": -160
+          },
+          "accurate_vs_export": {
+            "center_dx": 0.0,
+            "center_dy": 0.0,
+            "width_diff": 0,
+            "height_diff": 0
+          }
+        }
+      },
+      {
+        "cue_index": 8,
+        "time": 14.48,
+        "text": "อวัยวะหรือโครงสร้างบางอย่าง\nที่เคย",
+        "preview_bbox": [
+          157,
+          1318,
+          921,
+          1659
+        ],
+        "accurate_bbox": [
+          37,
+          1240,
+          1041,
+          1741
+        ],
+        "export_bbox": [
+          37,
+          1240,
+          1041,
+          1741
+        ],
+        "metrics": {
+          "preview_vs_accurate": {
+            "center_dx": 0.0,
+            "center_dy": -2.0,
+            "width_diff": -240,
+            "height_diff": -160
+          },
+          "accurate_vs_export": {
+            "center_dx": 0.0,
+            "center_dy": 0.0,
+            "width_diff": 0,
+            "height_diff": 0
+          }
+        }
+      },
+      {
+        "cue_index": 16,
+        "time": 28.02,
+        "text": "ตัวอย่างแรกก็อยู่\nใกล้ตัวเรามากๆ ครับ",
+        "preview_bbox": [
+          157,
+          1466,
+          921,
+          1659
+        ],
+        "accurate_bbox": [
+          37,
+          1388,
+          1041,
+          1741
+        ],
+        "export_bbox": [
+          37,
+          1388,
+          1041,
+          1741
+        ],
+        "metrics": {
+          "preview_vs_accurate": {
+            "center_dx": 0.0,
+            "center_dy": -2.0,
+            "width_diff": -240,
+            "height_diff": -160
+          },
+          "accurate_vs_export": {
+            "center_dx": 0.0,
+            "center_dy": 0.0,
+            "width_diff": 0,
+            "height_diff": 0
+          }
+        }
+      },
+      {
+        "cue_index": 24,
+        "time": 44.581,
+        "text": "เกิดมาโดยไม่มีมันแล้วครับ",
+        "preview_bbox": [
+          85,
+          1614,
+          993,
+          1659
+        ],
+        "accurate_bbox": [
+          22,
+          1536,
+          1058,
+          1678
+        ],
+        "export_bbox": [
+          22,
+          1536,
+          1058,
+          1678
+        ],
+        "metrics": {
+          "preview_vs_accurate": {
+            "center_dx": -1.0,
+            "center_dy": 29.5,
+            "width_diff": -128,
+            "height_diff": -97
+          },
+          "accurate_vs_export": {
+            "center_dx": 0.0,
+            "center_dy": 0.0,
+            "width_diff": 0,
+            "height_diff": 0
+          }
+        }
+      },
+      {
+        "cue_index": 32,
+        "time": 60.799,
+        "text": "ที่หลงเหลือมาจากอดีตครับ",
+        "preview_bbox": [
+          85,
+          1614,
+          993,
+          1659
+        ],
+        "accurate_bbox": [
+          2,
+          1536,
+          1075,
+          1741
+        ],
+        "export_bbox": [
+          2,
+          1536,
+          1075,
+          1741
+        ],
+        "metrics": {
+          "preview_vs_accurate": {
+            "center_dx": 0.5,
+            "center_dy": -2.0,
+            "width_diff": -165,
+            "height_diff": -160
+          },
+          "accurate_vs_export": {
+            "center_dx": 0.0,
+            "center_dy": 0.0,
+            "width_diff": 0,
+            "height_diff": 0
+          }
+        }
+      }
+    ]
+  }
+}

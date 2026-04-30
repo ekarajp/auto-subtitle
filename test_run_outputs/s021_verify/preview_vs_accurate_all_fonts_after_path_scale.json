@@ -1,0 +1,563 @@
+{
+  "video": "E:\\Curiosity Channel\\000_Short\\S021 Longus and teeth evident of evolution\\S021_1.mp4",
+  "subtitle": "E:\\Curiosity Channel\\000_Short\\S021 Longus and teeth evident of evolution\\S021_1_edited.srt",
+  "results": [
+    {
+      "font": "Tahoma",
+      "cue_index": 1,
+      "text": "สิ่งมีชีวิตทุกชนิดบนโลกไม่ได้ถูก\nออกแบบมา",
+      "preview_bbox": [
+        248,
+        1493,
+        831,
+        1669
+      ],
+      "accurate_bbox": [
+        0,
+        0,
+        1079,
+        1919
+      ],
+      "dx": 0.0,
+      "dy": 621.5,
+      "width_diff": -496,
+      "height_diff": -1743
+    },
+    {
+      "font": "Tahoma",
+      "cue_index": 8,
+      "text": "อวัยวะหรือโครงสร้างบางอย่าง\nที่เคย",
+      "preview_bbox": [
+        267,
+        1503,
+        811,
+        1680
+      ],
+      "accurate_bbox": [
+        0,
+        0,
+        1079,
+        1919
+      ],
+      "dx": -0.5,
+      "dy": 632.0,
+      "width_diff": -535,
+      "height_diff": -1742
+    },
+    {
+      "font": "Tahoma",
+      "cue_index": 16,
+      "text": "ตัวอย่างแรกก็อยู่\nใกล้ตัวเรามากๆ ครับ",
+      "preview_bbox": [
+        355,
+        1497,
+        724,
+        1678
+      ],
+      "accurate_bbox": [
+        0,
+        0,
+        1079,
+        1919
+      ],
+      "dx": 0.0,
+      "dy": 628.0,
+      "width_diff": -710,
+      "height_diff": -1738
+    },
+    {
+      "font": "Tahoma",
+      "cue_index": 24,
+      "text": "เกิดมาโดยไม่มีมันแล้วครับ",
+      "preview_bbox": [
+        301,
+        1628,
+        778,
+        1675
+      ],
+      "accurate_bbox": [
+        0,
+        0,
+        1079,
+        1919
+      ],
+      "dx": 0.0,
+      "dy": 692.0,
+      "width_diff": -602,
+      "height_diff": -1872
+    },
+    {
+      "font": "Tahoma",
+      "cue_index": 32,
+      "text": "ที่หลงเหลือมาจากอดีตครับ",
+      "preview_bbox": [
+        293,
+        1623,
+        786,
+        1680
+      ],
+      "accurate_bbox": [
+        0,
+        0,
+        1079,
+        1919
+      ],
+      "dx": 0.0,
+      "dy": 692.0,
+      "width_diff": -586,
+      "height_diff": -1862
+    },
+    {
+      "font": "Noto Sans Thai",
+      "cue_index": 1,
+      "text": "สิ่งมีชีวิตทุกชนิดบนโลกไม่ได้ถูก\nออกแบบมา",
+      "preview_bbox": [
+        320,
+        1494,
+        759,
+        1668
+      ],
+      "accurate_bbox": [
+        0,
+        0,
+        1079,
+        1919
+      ],
+      "dx": 0.0,
+      "dy": 621.5,
+      "width_diff": -640,
+      "height_diff": -1745
+    },
+    {
+      "font": "Noto Sans Thai",
+      "cue_index": 8,
+      "text": "อวัยวะหรือโครงสร้างบางอย่าง\nที่เคย",
+      "preview_bbox": [
+        335,
+        1505,
+        744,
+        1678
+      ],
+      "accurate_bbox": [
+        0,
+        0,
+        1079,
+        1919
+      ],
+      "dx": 0.0,
+      "dy": 632.0,
+      "width_diff": -670,
+      "height_diff": -1746
+    },
+    {
+      "font": "Noto Sans Thai",
+      "cue_index": 16,
+      "text": "ตัวอย่างแรกก็อยู่\nใกล้ตัวเรามากๆ ครับ",
+      "preview_bbox": [
+        400,
+        1499,
+        679,
+        1677
+      ],
+      "accurate_bbox": [
+        0,
+        0,
+        1079,
+        1919
+      ],
+      "dx": 0.0,
+      "dy": 628.5,
+      "width_diff": -800,
+      "height_diff": -1741
+    },
+    {
+      "font": "Noto Sans Thai",
+      "cue_index": 24,
+      "text": "เกิดมาโดยไม่มีมันแล้วครับ",
+      "preview_bbox": [
+        360,
+        1629,
+        719,
+        1674
+      ],
+      "accurate_bbox": [
+        0,
+        0,
+        1079,
+        1919
+      ],
+      "dx": 0.0,
+      "dy": 692.0,
+      "width_diff": -720,
+      "height_diff": -1874
+    },
+    {
+      "font": "Noto Sans Thai",
+      "cue_index": 32,
+      "text": "ที่หลงเหลือมาจากอดีตครับ",
+      "preview_bbox": [
+        354,
+        1624,
+        726,
+        1679
+      ],
+      "accurate_bbox": [
+        0,
+        0,
+        1079,
+        1919
+      ],
+      "dx": 0.5,
+      "dy": 692.0,
+      "width_diff": -707,
+      "height_diff": -1864
+    },
+    {
+      "font": "Leelawadee UI",
+      "cue_index": 1,
+      "text": "สิ่งมีชีวิตทุกชนิดบนโลกไม่ได้ถูก\nออกแบบมา",
+      "preview_bbox": [
+        343,
+        1497,
+        736,
+        1667
+      ],
+      "accurate_bbox": [
+        0,
+        0,
+        1079,
+        1919
+      ],
+      "dx": 0.0,
+      "dy": 622.5,
+      "width_diff": -686,
+      "height_diff": -1749
+    },
+    {
+      "font": "Leelawadee UI",
+      "cue_index": 8,
+      "text": "อวัยวะหรือโครงสร้างบางอย่าง\nที่เคย",
+      "preview_bbox": [
+        359,
+        1502,
+        719,
+        1677
+      ],
+      "accurate_bbox": [
+        0,
+        0,
+        1079,
+        1919
+      ],
+      "dx": -0.5,
+      "dy": 630.0,
+      "width_diff": -719,
+      "height_diff": -1744
+    },
+    {
+      "font": "Leelawadee UI",
+      "cue_index": 16,
+      "text": "ตัวอย่างแรกก็อยู่\nใกล้ตัวเรามากๆ ครับ",
+      "preview_bbox": [
+        410,
+        1500,
+        669,
+        1682
+      ],
+      "accurate_bbox": [
+        0,
+        0,
+        1079,
+        1919
+      ],
+      "dx": 0.0,
+      "dy": 631.5,
+      "width_diff": -820,
+      "height_diff": -1737
+    },
+    {
+      "font": "Leelawadee UI",
+      "cue_index": 24,
+      "text": "เกิดมาโดยไม่มีมันแล้วครับ",
+      "preview_bbox": [
+        378,
+        1626,
+        701,
+        1677
+      ],
+      "accurate_bbox": [
+        0,
+        0,
+        1079,
+        1919
+      ],
+      "dx": 0.0,
+      "dy": 692.0,
+      "width_diff": -756,
+      "height_diff": -1868
+    },
+    {
+      "font": "Leelawadee UI",
+      "cue_index": 32,
+      "text": "ที่หลงเหลือมาจากอดีตครับ",
+      "preview_bbox": [
+        372,
+        1626,
+        707,
+        1676
+      ],
+      "accurate_bbox": [
+        0,
+        0,
+        1079,
+        1919
+      ],
+      "dx": 0.0,
+      "dy": 691.5,
+      "width_diff": -744,
+      "height_diff": -1869
+    },
+    {
+      "font": "Arial",
+      "cue_index": 1,
+      "text": "สิ่งมีชีวิตทุกชนิดบนโลกไม่ได้ถูก\nออกแบบมา",
+      "preview_bbox": [
+        299,
+        1496,
+        780,
+        1667
+      ],
+      "accurate_bbox": [
+        0,
+        0,
+        1079,
+        1919
+      ],
+      "dx": 0.0,
+      "dy": 622.0,
+      "width_diff": -598,
+      "height_diff": -1748
+    },
+    {
+      "font": "Arial",
+      "cue_index": 8,
+      "text": "อวัยวะหรือโครงสร้างบางอย่าง\nที่เคย",
+      "preview_bbox": [
+        315,
+        1506,
+        764,
+        1677
+      ],
+      "accurate_bbox": [
+        0,
+        0,
+        1079,
+        1919
+      ],
+      "dx": 0.0,
+      "dy": 632.0,
+      "width_diff": -630,
+      "height_diff": -1748
+    },
+    {
+      "font": "Arial",
+      "cue_index": 16,
+      "text": "ตัวอย่างแรกก็อยู่\nใกล้ตัวเรามากๆ ครับ",
+      "preview_bbox": [
+        388,
+        1500,
+        692,
+        1675
+      ],
+      "accurate_bbox": [
+        0,
+        0,
+        1079,
+        1919
+      ],
+      "dx": 0.5,
+      "dy": 628.0,
+      "width_diff": -775,
+      "height_diff": -1744
+    },
+    {
+      "font": "Arial",
+      "cue_index": 24,
+      "text": "เกิดมาโดยไม่มีมันแล้วครับ",
+      "preview_bbox": [
+        343,
+        1630,
+        736,
+        1673
+      ],
+      "accurate_bbox": [
+        0,
+        0,
+        1079,
+        1919
+      ],
+      "dx": 0.0,
+      "dy": 692.0,
+      "width_diff": -686,
+      "height_diff": -1876
+    },
+    {
+      "font": "Arial",
+      "cue_index": 32,
+      "text": "ที่หลงเหลือมาจากอดีตครับ",
+      "preview_bbox": [
+        336,
+        1626,
+        743,
+        1677
+      ],
+      "accurate_bbox": [
+        0,
+        0,
+        1079,
+        1919
+      ],
+      "dx": 0.0,
+      "dy": 692.0,
+      "width_diff": -672,
+      "height_diff": -1868
+    },
+    {
+      "font": "Segoe UI",
+      "cue_index": 1,
+      "text": "สิ่งมีชีวิตทุกชนิดบนโลกไม่ได้ถูก\nออกแบบมา",
+      "preview_bbox": [
+        299,
+        1496,
+        780,
+        1667
+      ],
+      "accurate_bbox": [
+        0,
+        0,
+        1079,
+        1919
+      ],
+      "dx": 0.0,
+      "dy": 622.0,
+      "width_diff": -598,
+      "height_diff": -1748
+    },
+    {
+      "font": "Segoe UI",
+      "cue_index": 8,
+      "text": "อวัยวะหรือโครงสร้างบางอย่าง\nที่เคย",
+      "preview_bbox": [
+        315,
+        1506,
+        764,
+        1677
+      ],
+      "accurate_bbox": [
+        0,
+        0,
+        1079,
+        1919
+      ],
+      "dx": 0.0,
+      "dy": 632.0,
+      "width_diff": -630,
+      "height_diff": -1748
+    },
+    {
+      "font": "Segoe UI",
+      "cue_index": 16,
+      "text": "ตัวอย่างแรกก็อยู่\nใกล้ตัวเรามากๆ ครับ",
+      "preview_bbox": [
+        388,
+        1500,
+        691,
+        1675
+      ],
+      "accurate_bbox": [
+        0,
+        0,
+        1079,
+        1919
+      ],
+      "dx": 0.0,
+      "dy": 628.0,
+      "width_diff": -776,
+      "height_diff": -1744
+    },
+    {
+      "font": "Segoe UI",
+      "cue_index": 24,
+      "text": "เกิดมาโดยไม่มีมันแล้วครับ",
+      "preview_bbox": [
+        343,
+        1630,
+        736,
+        1673
+      ],
+      "accurate_bbox": [
+        0,
+        0,
+        1079,
+        1919
+      ],
+      "dx": 0.0,
+      "dy": 692.0,
+      "width_diff": -686,
+      "height_diff": -1876
+    },
+    {
+      "font": "Segoe UI",
+      "cue_index": 32,
+      "text": "ที่หลงเหลือมาจากอดีตครับ",
+      "preview_bbox": [
+        336,
+        1626,
+        743,
+        1677
+      ],
+      "accurate_bbox": [
+        0,
+        0,
+        1079,
+        1919
+      ],
+      "dx": 0.0,
+      "dy": 692.0,
+      "width_diff": -672,
+      "height_diff": -1868
+    }
+  ],
+  "summary": {
+    "Tahoma": {
+      "max_abs_dx": 0.5,
+      "max_abs_dy": 692.0,
+      "max_abs_width_diff": 710,
+      "max_abs_height_diff": 1872
+    },
+    "Noto Sans Thai": {
+      "max_abs_dx": 0.5,
+      "max_abs_dy": 692.0,
+      "max_abs_width_diff": 800,
+      "max_abs_height_diff": 1874
+    },
+    "Leelawadee UI": {
+      "max_abs_dx": 0.5,
+      "max_abs_dy": 692.0,
+      "max_abs_width_diff": 820,
+      "max_abs_height_diff": 1869
+    },
+    "Arial": {
+      "max_abs_dx": 0.5,
+      "max_abs_dy": 692.0,
+      "max_abs_width_diff": 775,
+      "max_abs_height_diff": 1876
+    },
+    "Segoe UI": {
+      "max_abs_dx": 0.0,
+      "max_abs_dy": 692.0,
+      "max_abs_width_diff": 776,
+      "max_abs_height_diff": 1876
+    }
+  }
+}

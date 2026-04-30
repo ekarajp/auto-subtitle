@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from PySide6.QtCore import QPointF, QSignalBlocker, QSize, QTimer, QUrl, Qt, Signal
-from PySide6.QtGui import QColor, QFont, QFontMetrics, QImage, QKeySequence, QPainter, QPen, QShortcut
+from PySide6.QtGui import QColor, QFont, QFontMetrics, QImage, QKeySequence, QPainter, QPainterPath, QPen, QShortcut, QTransform
 from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer, QVideoSink
 from PySide6.QtWidgets import (
+    QCheckBox,
     QComboBox,
     QDialog,
     QFrame,
@@ -20,8 +22,14 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from core.font_utils import resolve_font_details, resolve_font_family
 from core.subtitle_layout import (
     preview_baseline_shift,
+    preview_font_path_scale,
+    preview_font_stretch,
+    preview_font_vertical_nudge,
+    preview_font_x_offset,
+    preview_line_height_scale,
     preview_stroke_width,
     style_for_ass_export,
     style_for_preview,
@@ -32,6 +40,8 @@ from core.subtitle_layout import (
 )
 from core.style_preset import (
     SubtitleStyle,
+    effective_bottom_margin,
+    effective_horizontal_margin,
     style_with_overrides,
 )
 from core.subtitle_models import SubtitleCue
@@ -73,6 +83,10 @@ class VideoSubtitleCanvas(QWidget):
         self._frame_image: QImage | None = None
         self._frame_has_subtitles = False
         self._source_has_subtitles = False
+        self._show_safe_area_guides = True
+        self._font_resolution_sample = ""
+        self._debug_text_layout = os.environ.get("SMART_SUBTITLE_DEBUG_TEXT", "").strip() == "1"
+        self._last_text_diagnostics: dict[str, object] = {}
 
     def set_video_info(self, info: VideoInfo | None) -> None:
         self._video_info = info
@@ -84,10 +98,23 @@ class VideoSubtitleCanvas(QWidget):
 
     def set_style(self, style: SubtitleStyle) -> None:
         self._style = style
+        self._refresh_resolved_font_sample()
         self.update()
+
+    def set_show_safe_area_guides(self, enabled: bool) -> None:
+        self._show_safe_area_guides = bool(enabled)
+        self.update()
+
+    def set_debug_text_layout(self, enabled: bool) -> None:
+        self._debug_text_layout = bool(enabled)
+        self.update()
+
+    def last_text_diagnostics(self) -> dict[str, object]:
+        return dict(self._last_text_diagnostics)
 
     def set_cues(self, cues: list[SubtitleCue]) -> None:
         self._cues = cues
+        self._refresh_resolved_font_sample()
         self.update()
 
     def set_selected_cue(self, cue: SubtitleCue | None, *, force_preview: bool = True) -> None:
@@ -128,8 +155,11 @@ class VideoSubtitleCanvas(QWidget):
 
         painter.setPen(QPen(QColor("#D7DEE7"), 1))
         painter.drawRect(video_rect.adjusted(0, 0, -1, -1))
+        self._last_text_diagnostics = {}
 
         cue = self._active_cue()
+        if self._video_info and self._show_safe_area_guides:
+            self._draw_safe_area_guides(painter, video_rect, cue)
         if cue and self._video_info and not self._frame_has_subtitles and not self._source_has_subtitles:
             self._draw_subtitle(painter, video_rect, cue)
         painter.end()
@@ -165,7 +195,11 @@ class VideoSubtitleCanvas(QWidget):
     def _draw_subtitle(self, painter: QPainter, video_rect, cue: SubtitleCue) -> None:
         assert self._video_info is not None
         wrap_style = style_with_overrides(self._style, cue.style_overrides)
-        style = style_for_preview(wrap_style)
+        font_resolution_sample = self._font_resolution_sample or cue.text
+        calibration_sample = cue.text
+        font_resolution = resolve_font_details(wrap_style.font_family, font_resolution_sample)
+        wrap_style.font_family = font_resolution.resolved_family
+        style = style_for_preview(wrap_style, calibration_sample)
         layout_style = style_for_ass_export(wrap_style)
         scale_x = video_rect.width() / max(1, self._video_info.width)
         scale_y = video_rect.height() / max(1, self._video_info.height)
@@ -175,16 +209,44 @@ class VideoSubtitleCanvas(QWidget):
         font_size = max(1, round(style.font_size * scale_y))
         font = QFont(style.font_family)
         font.setPixelSize(font_size)
+        font.setStretch(preview_font_stretch(wrap_style, calibration_sample))
         font.setHintingPreference(QFont.HintingPreference.PreferNoHinting)
         font.setStyleStrategy(QFont.StyleStrategy.PreferAntialias)
         painter.setFont(font)
+        path_scale = preview_font_path_scale(wrap_style, calibration_sample)
+        vertical_nudge = preview_font_vertical_nudge(wrap_style, calibration_sample, font_size)
+        horizontal_nudge = preview_font_x_offset(wrap_style, calibration_sample, font_size)
+        line_height_scale = preview_line_height_scale(wrap_style, calibration_sample)
+        baseline_shift = preview_baseline_shift(font.pixelSize(), wrap_style, calibration_sample)
 
         source_line_height = subtitle_line_height(layout_style)
-        line_height = source_line_height * scale_y
+        line_height = source_line_height * scale_y * line_height_scale
         max_width = subtitle_max_width(self._video_info, layout_style)
         max_width_view = max_width * scale_x
         box_padding_x = max(8, round(layout_style.font_size * 0.45 * scale_x))
         box_padding_y = max(5, round(layout_style.font_size * 0.24 * scale_y))
+        metrics = QFontMetrics(font)
+        self._last_text_diagnostics = {
+            "requested_font_family": self._style.font_family,
+            "resolved_font_family": style.font_family,
+            "fallback_used": font_resolution.fallback_used,
+            "preview_font_family": style.font_family,
+            "preview_pixel_size": font.pixelSize(),
+            "ass_font_size": layout_style.font_size,
+            "stretch": font.stretch(),
+            "line_height_scale": round(line_height_scale, 4),
+            "baseline_shift": baseline_shift,
+            "horizontal_nudge": horizontal_nudge,
+            "vertical_nudge": vertical_nudge,
+            "path_scale": [round(path_scale[0], 4), round(path_scale[1], 4)],
+            "font_metrics": {
+                "ascent": metrics.ascent(),
+                "descent": metrics.descent(),
+                "leading": metrics.leading(),
+                "line_spacing": metrics.lineSpacing(),
+            },
+            "lines": [],
+        }
 
         if style.background_enabled and lines:
             bg = QColor(style.background_color)
@@ -236,6 +298,10 @@ class VideoSubtitleCanvas(QWidget):
                         text_rect.translated(offset + spread, offset + spread),
                         line,
                         font,
+                        path_scale=path_scale,
+                        horizontal_nudge=horizontal_nudge,
+                        baseline_shift=baseline_shift,
+                        vertical_nudge=vertical_nudge,
                         ass_alignment=an,
                         fill_color=shadow,
                         stroke_color=None,
@@ -247,11 +313,47 @@ class VideoSubtitleCanvas(QWidget):
                 text_rect,
                 line,
                 font,
+                path_scale=path_scale,
+                horizontal_nudge=horizontal_nudge,
+                baseline_shift=baseline_shift,
+                vertical_nudge=vertical_nudge,
                 ass_alignment=an,
                 fill_color=QColor(style.font_color),
                 stroke_color=QColor(style.stroke_color) if style.stroke_enabled and style.stroke_width > 0 else None,
                 stroke_width=preview_stroke_width(style.stroke_width, scale_y) if style.stroke_enabled else 0,
             )
+            line_bbox = self._measure_text_path(
+                text_rect,
+                line,
+                font,
+                an,
+                path_scale,
+                horizontal_nudge,
+                baseline_shift,
+                vertical_nudge,
+            )
+            self._last_text_diagnostics["lines"].append(
+                {
+                    "text": line,
+                    "anchor_x": round(x_view, 2),
+                    "anchor_y": round(y_view, 2),
+                    "alignment": an,
+                    "text_rect": [text_rect.left(), text_rect.top(), text_rect.width(), text_rect.height()],
+                    "path_bbox": [
+                        round(line_bbox.left(), 2),
+                        round(line_bbox.top(), 2),
+                        round(line_bbox.width(), 2),
+                        round(line_bbox.height(), 2),
+                    ],
+                }
+            )
+            if self._debug_text_layout:
+                self._draw_debug_guides(
+                    painter,
+                    line_bbox,
+                    QPointF(x_view, y_view),
+                    text_rect,
+                )
 
     def _fit_font_size(self, lines: list[str], family: str, start_size: int, max_width: float) -> int:
         size = start_size
@@ -270,39 +372,144 @@ class VideoSubtitleCanvas(QWidget):
         text: str,
         font: QFont,
         *,
+        path_scale: tuple[float, float],
+        horizontal_nudge: int,
+        baseline_shift: int,
+        vertical_nudge: int,
         ass_alignment: int,
         fill_color: QColor,
         stroke_color: QColor | None,
         stroke_width: int,
     ) -> None:
-        metrics = QFontMetrics(font)
-        text_width = metrics.horizontalAdvance(text)
-        if ass_alignment == 4:
-            x = text_rect.left()
-        elif ass_alignment == 6:
-            x = text_rect.right() - text_width
-        else:
-            x = text_rect.left() + (text_rect.width() - text_width) / 2
-        y = text_rect.top() + (text_rect.height() + metrics.ascent() - metrics.descent()) / 2
-        y += preview_baseline_shift(max(1, font.pixelSize()))
-        painter.setFont(font)
+        path = self._build_text_path(
+            text_rect,
+            text,
+            font,
+            ass_alignment,
+            path_scale,
+            horizontal_nudge,
+            baseline_shift,
+            vertical_nudge,
+        )
+        painter.save()
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        painter.setRenderHint(QPainter.RenderHint.TextAntialiasing, True)
         if stroke_color and stroke_width > 0:
-            painter.setPen(stroke_color)
-            for radius in range(1, stroke_width + 1):
-                offsets = [
-                    (-radius, 0),
-                    (radius, 0),
-                    (0, -radius),
-                    (0, radius),
-                    (-radius, -radius),
-                    (-radius, radius),
-                    (radius, -radius),
-                    (radius, radius),
-                ]
-                for dx, dy in offsets:
-                    painter.drawText(QPointF(x + dx, y + dy), text)
-        painter.setPen(fill_color)
-        painter.drawText(QPointF(x, y), text)
+            pen = QPen(stroke_color)
+            pen.setWidthF(max(0.5, stroke_width * 2.0))
+            pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+            pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+            painter.strokePath(path, pen)
+        painter.fillPath(path, fill_color)
+        painter.restore()
+
+    def _build_text_path(
+        self,
+        text_rect,
+        text: str,
+        font: QFont,
+        ass_alignment: int,
+        path_scale: tuple[float, float],
+        horizontal_nudge: int,
+        baseline_shift: int,
+        vertical_nudge: int,
+    ) -> QPainterPath:
+        sample_path = QPainterPath()
+        sample_path.addText(QPointF(0.0, 0.0), font, text)
+        scale_x, scale_y = path_scale
+        if abs(scale_x - 1.0) > 0.001 or abs(scale_y - 1.0) > 0.001:
+            sample_path = QTransform().scale(scale_x, scale_y).map(sample_path)
+        bounds = sample_path.boundingRect()
+
+        if ass_alignment == 4:
+            x = text_rect.left() - bounds.left()
+        elif ass_alignment == 6:
+            x = text_rect.right() - bounds.right()
+        else:
+            x = text_rect.left() + (text_rect.width() - bounds.width()) / 2 - bounds.left()
+        x += horizontal_nudge
+
+        y = text_rect.top() + (text_rect.height() - bounds.height()) / 2 - bounds.top()
+        y += baseline_shift
+        y += vertical_nudge
+        sample_path.translate(x, y)
+        return sample_path
+
+    def _measure_text_path(
+        self,
+        text_rect,
+        text: str,
+        font: QFont,
+        ass_alignment: int,
+        path_scale: tuple[float, float],
+        horizontal_nudge: int,
+        baseline_shift: int,
+        vertical_nudge: int,
+    ):
+        return self._build_text_path(
+            text_rect,
+            text,
+            font,
+            ass_alignment,
+            path_scale,
+            horizontal_nudge,
+            baseline_shift,
+            vertical_nudge,
+        ).boundingRect()
+
+    def _draw_debug_guides(self, painter: QPainter, bbox, anchor: QPointF, text_rect) -> None:
+        painter.save()
+        painter.setPen(QPen(QColor(255, 120, 120, 220), 1, Qt.PenStyle.DashLine))
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawRect(bbox)
+        painter.setPen(QPen(QColor(120, 220, 255, 220), 1, Qt.PenStyle.DashLine))
+        painter.drawRect(text_rect)
+        painter.setPen(QPen(QColor(120, 255, 170, 220), 1))
+        painter.drawLine(round(anchor.x()) - 8, round(anchor.y()), round(anchor.x()) + 8, round(anchor.y()))
+        painter.drawLine(round(anchor.x()), round(anchor.y()) - 8, round(anchor.x()), round(anchor.y()) + 8)
+        painter.restore()
+
+    def _draw_safe_area_guides(self, painter: QPainter, video_rect, cue: SubtitleCue | None) -> None:
+        assert self._video_info is not None
+        guide_style = style_with_overrides(self._style, cue.style_overrides) if cue else self._style
+        scale_x = video_rect.width() / max(1, self._video_info.width)
+        scale_y = video_rect.height() / max(1, self._video_info.height)
+        safe_x = effective_horizontal_margin(self._video_info, guide_style)
+        safe_y = effective_bottom_margin(self._video_info, guide_style)
+
+        left = round(video_rect.left() + safe_x * scale_x)
+        right = round(video_rect.right() - safe_x * scale_x)
+        top = round(video_rect.top() + safe_y * scale_y)
+        bottom = round(video_rect.bottom() - safe_y * scale_y)
+        rect = video_rect.__class__(left, top, max(1, right - left), max(1, bottom - top))
+
+        painter.save()
+        guide_pen = QPen(QColor(87, 184, 255, 190), 2, Qt.PenStyle.DashLine)
+        painter.setPen(guide_pen)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawRect(rect)
+
+        bottom_pen = QPen(QColor(255, 196, 87, 210), 2, Qt.PenStyle.DashLine)
+        painter.setPen(bottom_pen)
+        painter.drawLine(left, bottom, right, bottom)
+
+        if guide_style.text_position == "custom":
+            anchor_x = round(video_rect.left() + (self._video_info.width * guide_style.custom_x_percent / 100.0) * scale_x)
+            anchor_y = round(video_rect.top() + (self._video_info.height * guide_style.custom_y_percent / 100.0) * scale_y)
+            painter.setPen(QPen(QColor(120, 255, 170, 220), 2))
+            painter.drawLine(anchor_x - 10, anchor_y, anchor_x + 10, anchor_y)
+            painter.drawLine(anchor_x, anchor_y - 10, anchor_x, anchor_y + 10)
+            painter.drawEllipse(QPointF(anchor_x, anchor_y), 4, 4)
+
+        painter.setPen(QColor("#DDF4FF"))
+        painter.setFont(QFont("Segoe UI", 9))
+        label = f"Safe area X {safe_x}px | Y {safe_y}px"
+        painter.drawText(rect.adjusted(8, 8, -8, -8), Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft, label)
+        painter.restore()
+
+    def _refresh_resolved_font_sample(self) -> None:
+        texts = [cue.text for cue in self._cues if cue.text.strip()]
+        self._font_resolution_sample = "\n".join(texts[:120])
 
 
 class PreviewScrollArea(QScrollArea):
@@ -506,7 +713,7 @@ class SubtitlePreviewWidget(QWidget):
 
     def __init__(self, parent: QWidget | None = None, *, allow_fullscreen: bool = True) -> None:
         super().__init__(parent)
-        self.setMinimumHeight(280)
+        self.setMinimumHeight(160)
         self.setMinimumWidth(0)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self._video_info: VideoInfo | None = None
@@ -578,6 +785,11 @@ class SubtitlePreviewWidget(QWidget):
         self.fit_margin_spin.setToolTip("Fit-mode viewport margin only. Export uses the subtitle safe-area settings.")
         self.fit_margin_spin.valueChanged.connect(self._view_margin_changed)
 
+        self.safe_area_guide_check = QCheckBox("Safe")
+        self.safe_area_guide_check.setChecked(True)
+        self.safe_area_guide_check.setToolTip("Show the subtitle safe area and custom-position guide.")
+        self.safe_area_guide_check.toggled.connect(self._safe_area_guide_changed)
+
         self.position_slider = QSlider(Qt.Orientation.Horizontal)
         self.position_slider.setRange(0, 0)
         self.position_slider.sliderMoved.connect(self.seek_to)
@@ -588,34 +800,30 @@ class SubtitlePreviewWidget(QWidget):
 
         self.controls_bar = QWidget()
         self.controls_bar.setObjectName("PreviewControlsBar")
-        self.controls_bar.setMinimumHeight(108)
+        self.controls_bar.setMinimumHeight(68)
         controls = QVBoxLayout(self.controls_bar)
-        controls.setContentsMargins(10, 6, 10, 8)
-        controls.setSpacing(6)
+        controls.setContentsMargins(10, 5, 10, 6)
+        controls.setSpacing(4)
 
         button_row = QHBoxLayout()
-        button_row.setSpacing(8)
+        button_row.setSpacing(5)
         button_row.addWidget(self.play_button)
         button_row.addWidget(self.full_preview_button)
         button_row.addWidget(self.accurate_preview_button)
         button_row.addWidget(self.accurate_video_button)
         button_row.addStretch(1)
-
-        zoom_row = QHBoxLayout()
-        zoom_row.setSpacing(8)
-        zoom_row.addStretch(1)
-        zoom_row.addWidget(QLabel("Zoom"))
-        zoom_row.addWidget(self.zoom_combo)
-        zoom_row.addWidget(QLabel("Margin"))
-        zoom_row.addWidget(self.fit_margin_spin)
+        button_row.addWidget(QLabel("Zoom"))
+        button_row.addWidget(self.zoom_combo)
+        button_row.addWidget(QLabel("Margin"))
+        button_row.addWidget(self.fit_margin_spin)
+        button_row.addWidget(self.safe_area_guide_check)
 
         slider_row = QHBoxLayout()
-        slider_row.setSpacing(10)
+        slider_row.setSpacing(8)
         slider_row.addWidget(self.position_slider, 1)
         slider_row.addWidget(self.time_label)
 
         controls.addLayout(button_row)
-        controls.addLayout(zoom_row)
         controls.addLayout(slider_row)
 
         layout = QVBoxLayout(self)
@@ -628,6 +836,7 @@ class SubtitlePreviewWidget(QWidget):
         self.player.durationChanged.connect(self._duration_changed)
         self.player.playbackStateChanged.connect(self._playback_state_changed)
         self.preview_view.set_view_margin(int(self.fit_margin_spin.value()))
+        self.canvas.set_show_safe_area_guides(self.safe_area_guide_check.isChecked())
 
     def set_video_info(self, info: VideoInfo | None) -> None:
         self._video_info = info
@@ -731,6 +940,7 @@ class SubtitlePreviewWidget(QWidget):
         preview.set_video_path(self._video_path)
         preview._set_zoom_combo_data(self.zoom_combo.currentData())
         preview.fit_margin_spin.setValue(self.fit_margin_spin.value())
+        preview.safe_area_guide_check.setChecked(self.safe_area_guide_check.isChecked())
         preview.seek_to(current_position)
         preview.controls_bar.setMinimumHeight(92)
         dialog_layout.addWidget(preview)
@@ -739,10 +949,12 @@ class SubtitlePreviewWidget(QWidget):
             position = preview.player.position()
             zoom_value = preview.zoom_combo.currentData()
             margin_value = preview.fit_margin_spin.value()
+            guide_value = preview.safe_area_guide_check.isChecked()
             preview.pause_playback()
             preview.player.stop()
             self._set_zoom_combo_data(zoom_value)
             self.fit_margin_spin.setValue(margin_value)
+            self.safe_area_guide_check.setChecked(guide_value)
             self.seek_to(position)
 
         QShortcut(QKeySequence(Qt.Key.Key_Escape), dialog, dialog.close)
@@ -797,6 +1009,9 @@ class SubtitlePreviewWidget(QWidget):
     def _view_margin_changed(self, *args) -> None:
         del args
         self.preview_view.set_view_margin(int(self.fit_margin_spin.value()))
+
+    def _safe_area_guide_changed(self, enabled: bool) -> None:
+        self.canvas.set_show_safe_area_guides(enabled)
 
     def _step_zoom(self, direction: int) -> None:
         if direction == 0:

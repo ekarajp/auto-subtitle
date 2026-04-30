@@ -1,0 +1,136 @@
+{
+  "summary": {
+    "Tahoma": {
+      "max_abs_dx": 0.5,
+      "max_abs_dy": 1.5,
+      "max_abs_width_diff": 463,
+      "max_abs_height_diff": 45
+    },
+    "Noto Sans Thai": {
+      "max_abs_dx": 0.5,
+      "max_abs_dy": 7.0,
+      "max_abs_width_diff": 367,
+      "max_abs_height_diff": 30
+    },
+    "Leelawadee UI": {
+      "max_abs_dx": 0.5,
+      "max_abs_dy": 6.5,
+      "max_abs_width_diff": 419,
+      "max_abs_height_diff": 33
+    },
+    "Arial": {
+      "max_abs_dx": 0.5,
+      "max_abs_dy": 5.5,
+      "max_abs_width_diff": 355,
+      "max_abs_height_diff": 33
+    },
+    "Segoe UI": {
+      "max_abs_dx": 0.5,
+      "max_abs_dy": 5.5,
+      "max_abs_width_diff": 355,
+      "max_abs_height_diff": 33
+    }
+  },
+  "results": [
+    {
+      "font": "Tahoma",
+      "cue_index": 1,
+      "preview_bbox": [
+        248,
+        1495,
+        831,
+        1667
+      ],
+      "accurate_bbox": [
+        17,
+        1474,
+        1063,
+        1691
+      ],
+      "dx": -0.5,
+      "dy": -1.5,
+      "width_diff": -463,
+      "height_diff": -45
+    },
+    {
+      "font": "Noto Sans Thai",
+      "cue_index": 1,
+      "preview_bbox": [
+        290,
+        1497,
+        789,
+        1667
+      ],
+      "accurate_bbox": [
+        107,
+        1489,
+        973,
+        1689
+      ],
+      "dx": -0.5,
+      "dy": -7.0,
+      "width_diff": -367,
+      "height_diff": -30
+    },
+    {
+      "font": "Leelawadee UI",
+      "cue_index": 1,
+      "preview_bbox": [
+        316,
+        1499,
+        763,
+        1666
+      ],
+      "accurate_bbox": [
+        107,
+        1489,
+        973,
+        1689
+      ],
+      "dx": -0.5,
+      "dy": -6.5,
+      "width_diff": -419,
+      "height_diff": -33
+    },
+    {
+      "font": "Arial",
+      "cue_index": 1,
+      "preview_bbox": [
+        284,
+        1500,
+        795,
+        1667
+      ],
+      "accurate_bbox": [
+        107,
+        1489,
+        973,
+        1689
+      ],
+      "dx": -0.5,
+      "dy": -5.5,
+      "width_diff": -355,
+      "height_diff": -33
+    },
+    {
+      "font": "Segoe UI",
+      "cue_index": 1,
+      "preview_bbox": [
+        284,
+        1500,
+        795,
+        1667
+      ],
+      "accurate_bbox": [
+        107,
+        1489,
+        973,
+        1689
+      ],
+      "dx": -0.5,
+      "dy": -5.5,
+      "width_diff": -355,
+      "height_diff": -33
+    }
+  ]
+}

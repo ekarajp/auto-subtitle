@@ -1,0 +1,630 @@
+{
+  "font_count": 9,
+  "checked_count": 324,
+  "stopped_by_limit": false,
+  "thresholds": {
+    "center_px": 18.0,
+    "size_px": 80
+  },
+  "fonts": [
+    "Tahoma",
+    "Arial",
+    "Segoe UI",
+    "Prompt",
+    "Prompt Medium",
+    "Prompt SemiBold",
+    "Prompt Black",
+    "Angsana New",
+    "Cordia New"
+  ],
+  "sizes": [
+    32,
+    48,
+    72
+  ],
+  "scripts": [
+    "thai",
+    "latin",
+    "mixed"
+  ],
+  "styles": [
+    "default",
+    "no-stroke",
+    "heavy-stroke",
+    "background"
+  ],
+  "failures": [],
+  "worst": [
+    {
+      "font_family": "Arial",
+      "script": "latin",
+      "style_name": "no-stroke",
+      "font_size": 48,
+      "preview_box": {
+        "left": 34,
+        "top": 125,
+        "right": 926,
+        "bottom": 470,
+        "width": 892,
+        "height": 345
+      },
+      "render_box": {
+        "left": 72,
+        "top": 98,
+        "right": 886,
+        "bottom": 477,
+        "width": 814,
+        "height": 379
+      },
+      "center_dx": 1.0,
+      "center_dy": 10.0,
+      "width_delta": 78,
+      "height_delta": -34,
+      "passed": true,
+      "error": ""
+    },
+    {
+      "font_family": "Arial",
+      "script": "latin",
+      "style_name": "background",
+      "font_size": 48,
+      "preview_box": {
+        "left": 34,
+        "top": 125,
+        "right": 926,
+        "bottom": 470,
+        "width": 892,
+        "height": 345
+      },
+      "render_box": {
+        "left": 72,
+        "top": 98,
+        "right": 887,
+        "bottom": 477,
+        "width": 815,
+        "height": 379
+      },
+      "center_dx": 0.5,
+      "center_dy": 10.0,
+      "width_delta": 77,
+      "height_delta": -34,
+      "passed": true,
+      "error": ""
+    },
+    {
+      "font_family": "Arial",
+      "script": "latin",
+      "style_name": "default",
+      "font_size": 48,
+      "preview_box": {
+        "left": 31,
+        "top": 122,
+        "right": 929,
+        "bottom": 473,
+        "width": 898,
+        "height": 351
+      },
+      "render_box": {
+        "left": 68,
+        "top": 95,
+        "right": 891,
+        "bottom": 481,
+        "width": 823,
+        "height": 386
+      },
+      "center_dx": 0.5,
+      "center_dy": 9.5,
+      "width_delta": 75,
+      "height_delta": -35,
+      "passed": true,
+      "error": ""
+    },
+    {
+      "font_family": "Arial",
+      "script": "latin",
+      "style_name": "heavy-stroke",
+      "font_size": 48,
+      "preview_box": {
+        "left": 26,
+        "top": 117,
+        "right": 934,
+        "bottom": 478,
+        "width": 908,
+        "height": 361
+      },
+      "render_box": {
+        "left": 64,
+        "top": 90,
+        "right": 897,
+        "bottom": 487,
+        "width": 833,
+        "height": 397
+      },
+      "center_dx": -0.5,
+      "center_dy": 9.0,
+      "width_delta": 75,
+      "height_delta": -36,
+      "passed": true,
+      "error": ""
+    },
+    {
+      "font_family": "Arial",
+      "script": "latin",
+      "style_name": "default",
+      "font_size": 32,
+      "preview_box": {
+        "left": 96,
+        "top": 324,
+        "right": 864,
+        "bottom": 481,
+        "width": 768,
+        "height": 157
+      },
+      "render_box": {
+        "left": 64,
+        "top": 338,
+        "right": 897,
+        "bottom": 487,
+        "width": 833,
+        "height": 149
+      },
+      "center_dx": -0.5,
+      "center_dy": -10.0,
+      "width_delta": -65,
+      "height_delta": 8,
+      "passed": true,
+      "error": ""
+    },
+    {
+      "font_family": "Arial",
+      "script": "latin",
+      "style_name": "heavy-stroke",
+      "font_size": 32,
+      "preview_box": {
+        "left": 91,
+        "top": 319,
+        "right": 869,
+        "bottom": 486,
+        "width": 778,
+        "height": 167
+      },
+      "render_box": {
+        "left": 60,
+        "top": 334,
+        "right": 903,
+        "bottom": 493,
+        "width": 843,
+        "height": 159
+      },
+      "center_dx": -1.5,
+      "center_dy": -11.0,
+      "width_delta": -65,
+      "height_delta": 8,
+      "passed": true,
+      "error": ""
+    },
+    {
+      "font_family": "Arial",
+      "script": "latin",
+      "style_name": "background",
+      "font_size": 32,
+      "preview_box": {
+        "left": 99,
+        "top": 327,
+        "right": 861,
+        "bottom": 478,
+        "width": 762,
+        "height": 151
+      },
+      "render_box": {
+        "left": 66,
+        "top": 342,
+        "right": 893,
+        "bottom": 483,
+        "width": 827,
+        "height": 141
+      },
+      "center_dx": 0.5,
+      "center_dy": -10.0,
+      "width_delta": -65,
+      "height_delta": 10,
+      "passed": true,
+      "error": ""
+    },
+    {
+      "font_family": "Arial",
+      "script": "latin",
+      "style_name": "no-stroke",
+      "font_size": 32,
+      "preview_box": {
+        "left": 99,
+        "top": 327,
+        "right": 861,
+        "bottom": 478,
+        "width": 762,
+        "height": 151
+      },
+      "render_box": {
+        "left": 68,
+        "top": 342,
+        "right": 893,
+        "bottom": 483,
+        "width": 825,
+        "height": 141
+      },
+      "center_dx": -0.5,
+      "center_dy": -10.0,
+      "width_delta": -63,
+      "height_delta": 10,
+      "passed": true,
+      "error": ""
+    },
+    {
+      "font_family": "Arial",
+      "script": "latin",
+      "style_name": "default",
+      "font_size": 72,
+      "preview_box": {
+        "left": 136,
+        "top": 0,
+        "right": 824,
+        "bottom": 457,
+        "width": 688,
+        "height": 457
+      },
+      "render_box": {
+        "left": 106,
+        "top": 0,
+        "right": 851,
+        "bottom": 471,
+        "width": 745,
+        "height": 471
+      },
+      "center_dx": 1.5,
+      "center_dy": -7.0,
+      "width_delta": -57,
+      "height_delta": -14,
+      "passed": true,
+      "error": ""
+    },
+    {
+      "font_family": "Arial",
+      "script": "latin",
+      "style_name": "heavy-stroke",
+      "font_size": 72,
+      "preview_box": {
+        "left": 131,
+        "top": 0,
+        "right": 829,
+        "bottom": 462,
+        "width": 698,
+        "height": 462
+      },
+      "render_box": {
+        "left": 102,
+        "top": 0,
+        "right": 857,
+        "bottom": 477,
+        "width": 755,
+        "height": 477
+      },
+      "center_dx": 0.5,
+      "center_dy": -7.5,
+      "width_delta": -57,
+      "height_delta": -15,
+      "passed": true,
+      "error": ""
+    },
+    {
+      "font_family": "Arial",
+      "script": "latin",
+      "style_name": "no-stroke",
+      "font_size": 72,
+      "preview_box": {
+        "left": 139,
+        "top": 0,
+        "right": 821,
+        "bottom": 454,
+        "width": 682,
+        "height": 454
+      },
+      "render_box": {
+        "left": 110,
+        "top": 0,
+        "right": 847,
+        "bottom": 465,
+        "width": 737,
+        "height": 465
+      },
+      "center_dx": 1.5,
+      "center_dy": -5.5,
+      "width_delta": -55,
+      "height_delta": -11,
+      "passed": true,
+      "error": ""
+    },
+    {
+      "font_family": "Arial",
+      "script": "latin",
+      "style_name": "background",
+      "font_size": 72,
+      "preview_box": {
+        "left": 139,
+        "top": 0,
+        "right": 821,
+        "bottom": 454,
+        "width": 682,
+        "height": 454
+      },
+      "render_box": {
+        "left": 110,
+        "top": 0,
+        "right": 847,
+        "bottom": 465,
+        "width": 737,
+        "height": 465
+      },
+      "center_dx": 1.5,
+      "center_dy": -5.5,
+      "width_delta": -55,
+      "height_delta": -11,
+      "passed": true,
+      "error": ""
+    },
+    {
+      "font_family": "Prompt SemiBold",
+      "script": "latin",
+      "style_name": "no-stroke",
+      "font_size": 48,
+      "preview_box": {
+        "left": 62,
+        "top": 160,
+        "right": 898,
+        "bottom": 463,
+        "width": 836,
+        "height": 303
+      },
+      "render_box": {
+        "left": 76,
+        "top": 153,
+        "right": 885,
+        "bottom": 465,
+        "width": 809,
+        "height": 312
+      },
+      "center_dx": -0.5,
+      "center_dy": 2.5,
+      "width_delta": 27,
+      "height_delta": -9,
+      "passed": true,
+      "error": ""
+    },
+    {
+      "font_family": "Prompt SemiBold",
+      "script": "latin",
+      "style_name": "background",
+      "font_size": 48,
+      "preview_box": {
+        "left": 62,
+        "top": 160,
+        "right": 898,
+        "bottom": 463,
+        "width": 836,
+        "height": 303
+      },
+      "render_box": {
+        "left": 76,
+        "top": 152,
+        "right": 885,
+        "bottom": 465,
+        "width": 809,
+        "height": 313
+      },
+      "center_dx": -0.5,
+      "center_dy": 3.0,
+      "width_delta": 27,
+      "height_delta": -10,
+      "passed": true,
+      "error": ""
+    },
+    {
+      "font_family": "Prompt SemiBold",
+      "script": "latin",
+      "style_name": "default",
+      "font_size": 48,
+      "preview_box": {
+        "left": 59,
+        "top": 157,
+        "right": 901,
+        "bottom": 466,
+        "width": 842,
+        "height": 309
+      },
+      "render_box": {
+        "left": 73,
+        "top": 150,
+        "right": 891,
+        "bottom": 469,
+        "width": 818,
+        "height": 319
+      },
+      "center_dx": -2.0,
+      "center_dy": 2.0,
+      "width_delta": 24,
+      "height_delta": -10,
+      "passed": true,
+      "error": ""
+    },
+    {
+      "font_family": "Prompt SemiBold",
+      "script": "latin",
+      "style_name": "heavy-stroke",
+      "font_size": 48,
+      "preview_box": {
+        "left": 54,
+        "top": 152,
+        "right": 906,
+        "bottom": 471,
+        "width": 852,
+        "height": 319
+      },
+      "render_box": {
+        "left": 68,
+        "top": 145,
+        "right": 897,
+        "bottom": 475,
+        "width": 829,
+        "height": 330
+      },
+      "center_dx": -2.5,
+      "center_dy": 1.5,
+      "width_delta": 23,
+      "height_delta": -11,
+      "passed": true,
+      "error": ""
+    },
+    {
+      "font_family": "Prompt SemiBold",
+      "script": "mixed",
+      "style_name": "no-stroke",
+      "font_size": 72,
+      "preview_box": {
+        "left": 112,
+        "top": 0,
+        "right": 856,
+        "bottom": 430,
+        "width": 744,
+        "height": 430
+      },
+      "render_box": {
+        "left": 120,
+        "top": 0,
+        "right": 841,
+        "bottom": 425,
+        "width": 721,
+        "height": 425
+      },
+      "center_dx": 3.5,
+      "center_dy": 2.5,
+      "width_delta": 23,
+      "height_delta": 5,
+      "passed": true,
+      "error": ""
+    },
+    {
+      "font_family": "Prompt SemiBold",
+      "script": "mixed",
+      "style_name": "background",
+      "font_size": 72,
+      "preview_box": {
+        "left": 112,
+        "top": 0,
+        "right": 856,
+        "bottom": 430,
+        "width": 744,
+        "height": 430
+      },
+      "render_box": {
+        "left": 120,
+        "top": 0,
+        "right": 841,
+        "bottom": 427,
+        "width": 721,
+        "height": 427
+      },
+      "center_dx": 3.5,
+      "center_dy": 1.5,
+      "width_delta": 23,
+      "height_delta": 3,
+      "passed": true,
+      "error": ""
+    },
+    {
+      "font_family": "Prompt Black",
+      "script": "mixed",
+      "style_name": "no-stroke",
+      "font_size": 72,
+      "preview_box": {
+        "left": 104,
+        "top": 0,
+        "right": 864,
+        "bottom": 432,
+        "width": 760,
+        "height": 432
+      },
+      "render_box": {
+        "left": 112,
+        "top": 0,
+        "right": 849,
+        "bottom": 425,
+        "width": 737,
+        "height": 425
+      },
+      "center_dx": 3.5,
+      "center_dy": 3.5,
+      "width_delta": 23,
+      "height_delta": 7,
+      "passed": true,
+      "error": ""
+    },
+    {
+      "font_family": "Prompt Black",
+      "script": "mixed",
+      "style_name": "background",
+      "font_size": 72,
+      "preview_box": {
+        "left": 104,
+        "top": 0,
+        "right": 864,
+        "bottom": 431,
+        "width": 760,
+        "height": 431
+      },
+      "render_box": {
+        "left": 112,
+        "top": 0,
+        "right": 849,
+        "bottom": 427,
+        "width": 737,
+        "height": 427
+      },
+      "center_dx": 3.5,
+      "center_dy": 2.0,
+      "width_delta": 23,
+      "height_delta": 4,
+      "passed": true,
+      "error": ""
+    }
+  ],
+  "export_checks": [
+    {
+      "font_family": "Tahoma",
+      "font_size": 32,
+      "pixel_identical": true,
+      "max_channel_delta": 0,
+      "passed": true
+    },
+    {
+      "font_family": "Tahoma",
+      "font_size": 32,
+      "pixel_identical": true,
+      "max_channel_delta": 0,
+      "passed": true
+    },
+    {
+      "font_family": "Tahoma",
+      "font_size": 32,
+      "pixel_identical": true,
+      "max_channel_delta": 0,
+      "passed": true
+    },
+    {
+      "font_family": "Tahoma",
+      "font_size": 32,
+      "pixel_identical": true,
+      "max_channel_delta": 0,
+      "passed": true
+    }
+  ],
+  "passed": true
+}

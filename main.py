@@ -16,8 +16,6 @@ def main() -> int:
     app.setOrganizationName("Smart Subtitle")
 
     window = MainWindow()
-    window.setMinimumSize(1080, 720)
-    window.resize(1080, 720)
     window.show()
     return app.exec()
 

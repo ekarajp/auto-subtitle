@@ -1,0 +1,351 @@
+{
+  "video": {
+    "path": "D:\\Python\\PythonProject\\Smart Subtitle\\test\\S022_CUT.mp4",
+    "width": 1080,
+    "height": 1920,
+    "duration": 171.9,
+    "fps": 30.0,
+    "codec": "h264"
+  },
+  "subtitle": {
+    "path": "D:\\Python\\PythonProject\\Smart Subtitle\\test\\S022_CUT_transcript2.srt",
+    "cue_count": 57
+  },
+  "preview_vs_render_thresholds": {
+    "center_px": 10.0,
+    "size_px": 72
+  },
+  "font_reports": [
+    {
+      "font_family": "Tahoma",
+      "style": {
+        "font_family": "Tahoma",
+        "font_size": 48,
+        "font_color": "#00FF00",
+        "stroke_enabled": true,
+        "stroke_color": "#FF00FF",
+        "stroke_width": 3.0,
+        "shadow_enabled": true,
+        "shadow_color": "#0000FF",
+        "shadow_offset": 2.0,
+        "shadow_blur": 0.0,
+        "background_enabled": false,
+        "background_color": "#000000",
+        "background_opacity": 55,
+        "alignment": "bottom_center",
+        "bottom_margin": 0,
+        "horizontal_margin": 0,
+        "safe_area_mode": "auto",
+        "custom_safe_area_percent": 8,
+        "line_spacing": 4,
+        "max_width_percent": 88,
+        "max_lines": 2,
+        "text_position": "auto",
+        "custom_x_percent": 50,
+        "custom_y_percent": 84
+      },
+      "ass_sha256": "2973bf5a62f8c44780ad15e208edc2a800268c7d3716ffa9602f41c6045fc77f",
+      "preview_vs_render": [
+        {
+          "cue_index": 1,
+          "timestamp": 2.08,
+          "text": "ทำไมหมาถึงกลายเป็นสัตว์เลี้ยง\nหรืออาจจะเรียกได้ว่าเป็นเพื่อนที่ดีที่สุด\nของมนุษย์",
+          "preview_box": {
+            "left": 2,
+            "top": 1348,
+            "right": 1079,
+            "bottom": 1704
+          },
+          "render_box": {
+            "left": 0,
+            "top": 1354,
+            "right": 1079,
+            "bottom": 1707
+          },
+          "center_dx": 1.0,
+          "center_dy": -4.5,
+          "width_delta": -2,
+          "height_delta": 3,
+          "bottom_margin_delta": 3,
+          "passed": true
+        },
+        {
+          "cue_index": 29,
+          "timestamp": 87.05000000000001,
+          "text": "ก็ได้ทำการทดลองอันโด่งดังกับจิ้งจอกเงิน\nหรือว่าซิงเวอร์ฟอค",
+          "preview_box": {
+            "left": 26,
+            "top": 1354,
+            "right": 1053,
+            "bottom": 1696
+          },
+          "render_box": {
+            "left": 32,
+            "top": 1364,
+            "right": 1049,
+            "bottom": 1693
+          },
+          "center_dx": -1.0,
+          "center_dy": -3.5,
+          "width_delta": 10,
+          "height_delta": 13,
+          "bottom_margin_delta": -3,
+          "passed": true
+        },
+        {
+          "cue_index": 57,
+          "timestamp": 170.61,
+          "text": "ในประวัติศาสตร์สิ่งมีชีวิตบนโลกนี้ครับ",
+          "preview_box": {
+            "left": 0,
+            "top": 1469,
+            "right": 1079,
+            "bottom": 1694
+          },
+          "render_box": {
+            "left": 0,
+            "top": 1474,
+            "right": 1079,
+            "bottom": 1691
+          },
+          "center_dx": 0.0,
+          "center_dy": -1.0,
+          "width_delta": 0,
+          "height_delta": 8,
+          "bottom_margin_delta": -3,
+          "passed": true
+        }
+      ],
+      "render_vs_export": {
+        "mode": "same ASS document and same FFmpeg export command rendered twice",
+        "timestamp": 2.08,
+        "pixel_identical": true,
+        "max_channel_delta": 0,
+        "passed": true,
+        "note": "This validates the app's Render Preview Video and final Export path. The single-frame PNG preview is intentionally not pixel-identical to H.264 export because export encodes video."
+      },
+      "passed": true
+    },
+    {
+      "font_family": "Prompt",
+      "style": {
+        "font_family": "Prompt",
+        "font_size": 48,
+        "font_color": "#00FF00",
+        "stroke_enabled": true,
+        "stroke_color": "#FF00FF",
+        "stroke_width": 3.0,
+        "shadow_enabled": true,
+        "shadow_color": "#0000FF",
+        "shadow_offset": 2.0,
+        "shadow_blur": 0.0,
+        "background_enabled": false,
+        "background_color": "#000000",
+        "background_opacity": 55,
+        "alignment": "bottom_center",
+        "bottom_margin": 0,
+        "horizontal_margin": 0,
+        "safe_area_mode": "auto",
+        "custom_safe_area_percent": 8,
+        "line_spacing": 4,
+        "max_width_percent": 88,
+        "max_lines": 2,
+        "text_position": "auto",
+        "custom_x_percent": 50,
+        "custom_y_percent": 84
+      },
+      "ass_sha256": "b735362708b858f651813dda8848c44ef321ce3bbf4866d728450bb452b1f6e8",
+      "preview_vs_render": [
+        {
+          "cue_index": 1,
+          "timestamp": 2.08,
+          "text": "ทำไมหมาถึงกลายเป็นสัตว์เลี้ยง\nหรืออาจจะเรียกได้ว่าเป็นเพื่อนที่ดีที่สุด\nของมนุษย์",
+          "preview_box": {
+            "left": 39,
+            "top": 1370,
+            "right": 1040,
+            "bottom": 1689
+          },
+          "render_box": {
+            "left": 40,
+            "top": 1360,
+            "right": 1041,
+            "bottom": 1697
+          },
+          "center_dx": -1.0,
+          "center_dy": 1.0,
+          "width_delta": 0,
+          "height_delta": -18,
+          "bottom_margin_delta": 8,
+          "passed": true
+        },
+        {
+          "cue_index": 29,
+          "timestamp": 87.05000000000001,
+          "text": "ก็ได้ทำการทดลองอันโด่งดังกับจิ้งจอกเงิน\nหรือว่าซิงเวอร์ฟอค",
+          "preview_box": {
+            "left": 123,
+            "top": 1375,
+            "right": 956,
+            "bottom": 1682
+          },
+          "render_box": {
+            "left": 124,
+            "top": 1370,
+            "right": 956,
+            "bottom": 1681
+          },
+          "center_dx": -0.5,
+          "center_dy": 3.0,
+          "width_delta": 1,
+          "height_delta": -4,
+          "bottom_margin_delta": -1,
+          "passed": true
+        },
+        {
+          "cue_index": 57,
+          "timestamp": 170.61,
+          "text": "ในประวัติศาสตร์สิ่งมีชีวิตบนโลกนี้ครับ",
+          "preview_box": {
+            "left": 91,
+            "top": 1494,
+            "right": 988,
+            "bottom": 1681
+          },
+          "render_box": {
+            "left": 92,
+            "top": 1484,
+            "right": 989,
+            "bottom": 1681
+          },
+          "center_dx": -1.0,
+          "center_dy": 5.0,
+          "width_delta": 0,
+          "height_delta": -10,
+          "bottom_margin_delta": 0,
+          "passed": true
+        }
+      ],
+      "render_vs_export": {
+        "mode": "same ASS document and same FFmpeg export command rendered twice",
+        "timestamp": 2.08,
+        "pixel_identical": true,
+        "max_channel_delta": 0,
+        "passed": true,
+        "note": "This validates the app's Render Preview Video and final Export path. The single-frame PNG preview is intentionally not pixel-identical to H.264 export because export encodes video."
+      },
+      "passed": true
+    },
+    {
+      "font_family": "Prompt Medium",
+      "style": {
+        "font_family": "Prompt Medium",
+        "font_size": 48,
+        "font_color": "#00FF00",
+        "stroke_enabled": true,
+        "stroke_color": "#FF00FF",
+        "stroke_width": 3.0,
+        "shadow_enabled": true,
+        "shadow_color": "#0000FF",
+        "shadow_offset": 2.0,
+        "shadow_blur": 0.0,
+        "background_enabled": false,
+        "background_color": "#000000",
+        "background_opacity": 55,
+        "alignment": "bottom_center",
+        "bottom_margin": 0,
+        "horizontal_margin": 0,
+        "safe_area_mode": "auto",
+        "custom_safe_area_percent": 8,
+        "line_spacing": 4,
+        "max_width_percent": 88,
+        "max_lines": 2,
+        "text_position": "auto",
+        "custom_x_percent": 50,
+        "custom_y_percent": 84
+      },
+      "ass_sha256": "1f844a6e388bae37acd0d27542e90ba69d1318ba607b87f97cf9a79b870bed2a",
+      "preview_vs_render": [
+        {
+          "cue_index": 1,
+          "timestamp": 2.08,
+          "text": "ทำไมหมาถึงกลายเป็นสัตว์เลี้ยง\nหรืออาจจะเรียกได้ว่าเป็นเพื่อนที่ดีที่สุด\nของมนุษย์",
+          "preview_box": {
+            "left": 31,
+            "top": 1369,
+            "right": 1048,
+            "bottom": 1690
+          },
+          "render_box": {
+            "left": 32,
+            "top": 1358,
+            "right": 1049,
+            "bottom": 1697
+          },
+          "center_dx": -1.0,
+          "center_dy": 2.0,
+          "width_delta": 0,
+          "height_delta": -18,
+          "bottom_margin_delta": 7,
+          "passed": true
+        },
+        {
+          "cue_index": 29,
+          "timestamp": 87.05000000000001,
+          "text": "ก็ได้ทำการทดลองอันโด่งดังกับจิ้งจอกเงิน\nหรือว่าซิงเวอร์ฟอค",
+          "preview_box": {
+            "left": 117,
+            "top": 1375,
+            "right": 963,
+            "bottom": 1683
+          },
+          "render_box": {
+            "left": 116,
+            "top": 1370,
+            "right": 963,
+            "bottom": 1681
+          },
+          "center_dx": 0.5,
+          "center_dy": 3.5,
+          "width_delta": -1,
+          "height_delta": -3,
+          "bottom_margin_delta": -2,
+          "passed": true
+        },
+        {
+          "cue_index": 57,
+          "timestamp": 170.61,
+          "text": "ในประวัติศาสตร์สิ่งมีชีวิตบนโลกนี้ครับ",
+          "preview_box": {
+            "left": 83,
+            "top": 1493,
+            "right": 996,
+            "bottom": 1682
+          },
+          "render_box": {
+            "left": 84,
+            "top": 1482,
+            "right": 997,
+            "bottom": 1681
+          },
+          "center_dx": -1.0,
+          "center_dy": 6.0,
+          "width_delta": 0,
+          "height_delta": -10,
+          "bottom_margin_delta": -1,
+          "passed": true
+        }
+      ],
+      "render_vs_export": {
+        "mode": "same ASS document and same FFmpeg export command rendered twice",
+        "timestamp": 2.08,
+        "pixel_identical": true,
+        "max_channel_delta": 0,
+        "passed": true,
+        "note": "This validates the app's Render Preview Video and final Export path. The single-frame PNG preview is intentionally not pixel-identical to H.264 export because export encodes video."
+      },
+      "passed": true
+    }
+  ],
+  "passed": true
+}

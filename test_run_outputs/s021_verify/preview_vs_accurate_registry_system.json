@@ -1,0 +1,236 @@
+{
+  "summary": {
+    "Tahoma": {
+      "max_abs_dx": 3.5,
+      "max_abs_dy": 8.0,
+      "max_abs_width_diff": 9,
+      "max_abs_height_diff": 14
+    },
+    "Noto Sans Thai": {
+      "max_abs_dx": 2.5,
+      "max_abs_dy": 11.5,
+      "max_abs_width_diff": 28,
+      "max_abs_height_diff": 12
+    },
+    "Leelawadee UI": {
+      "max_abs_dx": 2.5,
+      "max_abs_dy": 12.5,
+      "max_abs_width_diff": 19,
+      "max_abs_height_diff": 8
+    },
+    "Arial": {
+      "max_abs_dx": 2.5,
+      "max_abs_dy": 11.5,
+      "max_abs_width_diff": 28,
+      "max_abs_height_diff": 12
+    },
+    "Segoe UI": {
+      "max_abs_dx": 2.5,
+      "max_abs_dy": 11.5,
+      "max_abs_width_diff": 28,
+      "max_abs_height_diff": 12
+    }
+  },
+  "results": [
+    {
+      "font": "Tahoma",
+      "cue_index": 1,
+      "dx": -0.5,
+      "dy": -8.0,
+      "width_diff": 9,
+      "height_diff": -14
+    },
+    {
+      "font": "Tahoma",
+      "cue_index": 8,
+      "dx": -1.0,
+      "dy": 0.0,
+      "width_diff": 8,
+      "height_diff": 6
+    },
+    {
+      "font": "Tahoma",
+      "cue_index": 16,
+      "dx": -2.0,
+      "dy": -0.5,
+      "width_diff": 8,
+      "height_diff": -11
+    },
+    {
+      "font": "Tahoma",
+      "cue_index": 24,
+      "dx": -3.5,
+      "dy": 0.0,
+      "width_diff": 7,
+      "height_diff": 6
+    },
+    {
+      "font": "Tahoma",
+      "cue_index": 32,
+      "dx": -0.5,
+      "dy": -1.5,
+      "width_diff": 5,
+      "height_diff": -3
+    },
+    {
+      "font": "Noto Sans Thai",
+      "cue_index": 1,
+      "dx": -0.5,
+      "dy": -11.5,
+      "width_diff": 9,
+      "height_diff": -9
+    },
+    {
+      "font": "Noto Sans Thai",
+      "cue_index": 8,
+      "dx": 0.0,
+      "dy": 3.5,
+      "width_diff": 28,
+      "height_diff": -9
+    },
+    {
+      "font": "Noto Sans Thai",
+      "cue_index": 16,
+      "dx": -2.5,
+      "dy": -3.0,
+      "width_diff": 13,
+      "height_diff": -12
+    },
+    {
+      "font": "Noto Sans Thai",
+      "cue_index": 24,
+      "dx": -2.5,
+      "dy": -3.0,
+      "width_diff": 9,
+      "height_diff": 6
+    },
+    {
+      "font": "Noto Sans Thai",
+      "cue_index": 32,
+      "dx": -1.0,
+      "dy": -0.5,
+      "width_diff": 2,
+      "height_diff": -11
+    },
+    {
+      "font": "Leelawadee UI",
+      "cue_index": 1,
+      "dx": -0.5,
+      "dy": -12.5,
+      "width_diff": 5,
+      "height_diff": -7
+    },
+    {
+      "font": "Leelawadee UI",
+      "cue_index": 8,
+      "dx": 0.0,
+      "dy": -0.5,
+      "width_diff": 14,
+      "height_diff": -1
+    },
+    {
+      "font": "Leelawadee UI",
+      "cue_index": 16,
+      "dx": -2.5,
+      "dy": -3.5,
+      "width_diff": 15,
+      "height_diff": -7
+    },
+    {
+      "font": "Leelawadee UI",
+      "cue_index": 24,
+      "dx": -2.5,
+      "dy": -4.0,
+      "width_diff": 19,
+      "height_diff": 8
+    },
+    {
+      "font": "Leelawadee UI",
+      "cue_index": 32,
+      "dx": -1.0,
+      "dy": -4.5,
+      "width_diff": -6,
+      "height_diff": -7
+    },
+    {
+      "font": "Arial",
+      "cue_index": 1,
+      "dx": -0.5,
+      "dy": -11.5,
+      "width_diff": 9,
+      "height_diff": -9
+    },
+    {
+      "font": "Arial",
+      "cue_index": 8,
+      "dx": 0.0,
+      "dy": 3.5,
+      "width_diff": 28,
+      "height_diff": -9
+    },
+    {
+      "font": "Arial",
+      "cue_index": 16,
+      "dx": -2.5,
+      "dy": -3.0,
+      "width_diff": 13,
+      "height_diff": -12
+    },
+    {
+      "font": "Arial",
+      "cue_index": 24,
+      "dx": -2.5,
+      "dy": -3.0,
+      "width_diff": 9,
+      "height_diff": 6
+    },
+    {
+      "font": "Arial",
+      "cue_index": 32,
+      "dx": -1.0,
+      "dy": -0.5,
+      "width_diff": 2,
+      "height_diff": -11
+    },
+    {
+      "font": "Segoe UI",
+      "cue_index": 1,
+      "dx": -0.5,
+      "dy": -11.5,
+      "width_diff": 9,
+      "height_diff": -9
+    },
+    {
+      "font": "Segoe UI",
+      "cue_index": 8,
+      "dx": 0.0,
+      "dy": 3.5,
+      "width_diff": 28,
+      "height_diff": -9
+    },
+    {
+      "font": "Segoe UI",
+      "cue_index": 16,
+      "dx": -2.5,
+      "dy": -3.0,
+      "width_diff": 13,
+      "height_diff": -12
+    },
+    {
+      "font": "Segoe UI",
+      "cue_index": 24,
+      "dx": -2.5,
+      "dy": -3.0,
+      "width_diff": 9,
+      "height_diff": 6
+    },
+    {
+      "font": "Segoe UI",
+      "cue_index": 32,
+      "dx": -1.0,
+      "dy": -0.5,
+      "width_diff": 2,
+      "height_diff": -11
+    }
+  ]
+}

@@ -22,7 +22,7 @@ def ensure_ffmpeg() -> str:
         executable = _find_winget_executable("ffmpeg.exe")
     if not executable:
         raise RenderError(
-            "ไม่พบ ffmpeg ใน PATH กรุณาติดตั้ง FFmpeg และเพิ่มโฟลเดอร์ bin ลง PATH"
+            "ffmpeg was not found in PATH. Please install FFmpeg and add its bin folder to PATH."
         )
     return executable
 
@@ -49,9 +49,9 @@ def render_with_ass(
     output_path = Path(output_video)
 
     if not input_path.exists():
-        raise RenderError(f"ไม่พบไฟล์วิดีโอ: {input_path}")
+        raise RenderError(f"Video file not found: {input_path}")
     if not ass_path.exists():
-        raise RenderError(f"ไม่พบไฟล์ ASS subtitle ชั่วคราว: {ass_path}")
+        raise RenderError(f"Temporary ASS subtitle file not found: {ass_path}")
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     filter_arg = f"ass='{_escape_filter_path(ass_path)}'"

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 
+from core.font_utils import resolve_font_family
 from core.style_preset import SubtitleStyle, style_with_overrides
 from core.subtitle_layout import (
     ASS_FONT_SCALE,
@@ -21,8 +22,11 @@ ASS_EXPORT_FONT_SCALE = ASS_FONT_SCALE
 
 def build_ass_document(video_info: VideoInfo, cues: list[SubtitleCue], style: SubtitleStyle) -> str:
     """Build an ASS subtitle document ready for FFmpeg's ass filter."""
-    header = _build_header(video_info, style_for_ass_export(style))
-    events = [_build_event_lines(video_info, cue, style) for cue in cues]
+    sample_text = "\n".join(cue.text for cue in cues)
+    resolved_style = SubtitleStyle.from_dict(style.to_dict())
+    resolved_style.font_family = resolve_font_family(style.font_family, sample_text)
+    header = _build_header(video_info, style_for_ass_export(resolved_style))
+    events = [_build_event_lines(video_info, cue, resolved_style) for cue in cues]
     return header + "\n".join(line for group in events for line in group) + "\n"
 
 
@@ -74,20 +78,37 @@ def _build_header(video_info: VideoInfo, style: SubtitleStyle) -> str:
 
 def _build_event_lines(video_info: VideoInfo, cue: SubtitleCue, style: SubtitleStyle) -> list[str]:
     wrap_style = style_with_overrides(style, cue.style_overrides)
+    wrap_style.font_family = resolve_font_family(wrap_style.font_family, cue.text)
     ass_style = style_for_ass_export(wrap_style)
     start = format_ass_time(cue.start)
     end = format_ass_time(cue.end)
     lines = shared_wrap_subtitle_text(cue.text, video_info, wrap_style, limit_lines=False)
     positions = shared_subtitle_line_positions(video_info, ass_style, len(lines), renderer="ass")
-    blur_tag = f"\\blur{ass_style.shadow_blur:.1f}" if ass_style.shadow_blur > 0 else ""
+    text_style_tags = _build_text_override_tags(ass_style)
 
     result: list[str] = []
     if ass_style.background_enabled:
         result.append(_build_background_box_event(video_info, start, end, ass_style, positions, len(lines)))
     for line, (x, y, an) in zip(lines, positions):
-        override = f"{{\\an{an}\\pos({x},{y}){blur_tag}}}"
+        override = f"{{\\an{an}\\pos({x},{y}){text_style_tags}}}"
         result.append(f"Dialogue: 1,{start},{end},Default,,0,0,0,,{override}{escape_ass_text(line)}")
     return result
+
+
+def _build_text_override_tags(style: SubtitleStyle) -> str:
+    outline = max(0.0, style.stroke_width) if style.stroke_enabled else 0.0
+    shadow = max(0.0, style.shadow_offset) if style.shadow_enabled else 0.0
+    blur_tag = f"\\blur{style.shadow_blur:.1f}" if style.shadow_blur > 0 else ""
+    return (
+        f"\\fn{_escape_ass_tag_value(style.font_family)}"
+        f"\\fs{style.font_size}"
+        f"\\c{ass_rgb_color(style.font_color)}"
+        f"\\3c{ass_rgb_color(style.stroke_color)}"
+        f"\\4c{ass_rgb_color(style.shadow_color)}"
+        f"\\bord{outline:.1f}"
+        f"\\shad{shadow:.1f}"
+        f"{blur_tag}"
+    )
 
 
 def _build_background_box_event(
@@ -126,8 +147,14 @@ def _build_background_box_event(
     top = max(0, min(video_info.height, top))
     bottom = max(0, min(video_info.height, bottom))
 
+    box_tags = (
+        f"\\an7\\pos(0,0)"
+        f"\\c{ass_rgb_color(style.background_color)}"
+        f"\\1a&H{_ass_alpha(style.background_opacity):02X}&"
+        "\\bord0\\shad0\\p1"
+    )
     path = f"m {left} {top} l {right} {top} l {right} {bottom} l {left} {bottom}"
-    return f"Dialogue: 0,{start},{end},Box,,0,0,0,,{{\\an7\\pos(0,0)\\p1}}{path}"
+    return f"Dialogue: 0,{start},{end},Box,,0,0,0,,{{{box_tags}}}{path}"
 
 
 def subtitle_line_positions(
@@ -163,5 +190,24 @@ def ass_color(hex_color: str, *, opacity_percent: int = 100) -> str:
     return f"&H{alpha:02X}{bb}{gg}{rr}"
 
 
+def ass_rgb_color(hex_color: str) -> str:
+    cleaned = hex_color.strip().lstrip("#")
+    if len(cleaned) != 6 or not re.fullmatch(r"[0-9a-fA-F]{6}", cleaned):
+        cleaned = "FFFFFF"
+    rr = cleaned[0:2]
+    gg = cleaned[2:4]
+    bb = cleaned[4:6]
+    return f"&H{bb}{gg}{rr}&"
+
+
+def _ass_alpha(opacity_percent: int) -> int:
+    opacity = max(0, min(100, opacity_percent))
+    return round(255 * (100 - opacity) / 100)
+
+
 def _escape_commas(value: str) -> str:
     return value.replace(",", " ")
+
+
+def _escape_ass_tag_value(value: str) -> str:
+    return value.replace("\\", " ").replace("{", " ").replace("}", " ").replace("\n", " ").strip() or "Arial"

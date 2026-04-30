@@ -4,33 +4,35 @@ import re
 import unicodedata
 from functools import lru_cache
 
+from core.font_calibration import resolve_font_calibration
+from core.font_utils import resolve_font_family
 from core.style_preset import SubtitleStyle, effective_bottom_margin, effective_horizontal_margin
 from core.video_info import VideoInfo
 
 
 # Single source of truth for subtitle layout.
 #
-# Qt preview and FFmpeg/libass do not interpret the same font number the same
-# way. Keep that renderer calibration here so every caller still reads from one
-# layout model instead of maintaining separate magic numbers.
+# FFmpeg/libass and Qt do not rasterize the same font at the same numeric size.
+# Keep the renderer calibration here so both preview and export still read from
+# one positioning model while using renderer-specific glyph scaling.
 WRAP_FONT_SCALE = 1.45
-PREVIEW_FONT_SCALE = 1.45
 ASS_FONT_SCALE = 2.05
 ASS_Y_OFFSET_LINE_FACTOR = -0.10
 PREVIEW_Y_OFFSET_LINE_FACTOR = ASS_Y_OFFSET_LINE_FACTOR
-PREVIEW_BASELINE_SHIFT_FACTOR = -0.035
-PREVIEW_STROKE_SCALE = 1.18
+PREVIEW_STROKE_SCALE = 1.00
 
 
-def style_for_preview(style: SubtitleStyle) -> SubtitleStyle:
-    copied = SubtitleStyle.from_dict(style.to_dict())
-    copied.font_size = max(1, round(copied.font_size * PREVIEW_FONT_SCALE))
-    copied.line_spacing = round(copied.line_spacing * PREVIEW_FONT_SCALE)
+def style_for_preview(style: SubtitleStyle, sample_text: str = "") -> SubtitleStyle:
+    copied = style_for_ass_export(style)
+    copied.font_family = resolve_font_family(copied.font_family, sample_text)
+    copied.font_size = max(1, round(copied.font_size * preview_font_scale(style, sample_text)))
+    copied.line_spacing = 0
     return copied
 
 
 def style_for_ass_export(style: SubtitleStyle) -> SubtitleStyle:
     copied = SubtitleStyle.from_dict(style.to_dict())
+    copied.font_family = resolve_font_family(copied.font_family, "")
     copied.font_size = max(1, round(copied.font_size * ASS_FONT_SCALE))
     copied.line_spacing = round(copied.line_spacing * ASS_FONT_SCALE)
     return copied
@@ -47,8 +49,10 @@ def wrap_subtitle_text(
     if not source_lines:
         return [""]
 
+    resolved_family = resolve_font_family(style.font_family, text)
+    calibration = resolve_font_calibration(resolved_family, text, style_calibration_key(style))
     max_width_px = video_info.width * max(20, min(style.max_width_percent, 100)) / 100
-    visual_font_px = max(1.0, style.font_size * WRAP_FONT_SCALE)
+    visual_font_px = max(1.0, style.font_size * WRAP_FONT_SCALE * (1.0 + calibration.wrap_width_adjustment))
     max_width_units = max(4.0, max_width_px / visual_font_px)
 
     wrapped: list[str] = []
@@ -124,12 +128,60 @@ def subtitle_max_width(video_info: VideoInfo, style: SubtitleStyle) -> int:
     return round(video_info.width * max(20, min(style.max_width_percent, 100)) / 100)
 
 
-def preview_baseline_shift(font_size: int) -> int:
-    return round(font_size * PREVIEW_BASELINE_SHIFT_FACTOR)
+def preview_baseline_shift(font_size: int, style: SubtitleStyle, sample_text: str = "") -> int:
+    resolved_family = resolve_font_family(style.font_family, sample_text)
+    calibration = resolve_font_calibration(resolved_family, sample_text, style_calibration_key(style))
+    return round(font_size * calibration.baseline_offset)
 
 
 def preview_stroke_width(stroke_width: float, scale_y: float) -> int:
     return max(1, round(stroke_width * scale_y * PREVIEW_STROKE_SCALE))
+
+
+def preview_font_scale(style: SubtitleStyle, sample_text: str = "") -> float:
+    resolved_family = resolve_font_family(style.font_family, sample_text)
+    calibration = resolve_font_calibration(resolved_family, sample_text, style_calibration_key(style))
+    return calibration.size_scale
+
+
+def preview_font_stretch(style: SubtitleStyle, sample_text: str = "") -> int:
+    resolved_family = resolve_font_family(style.font_family, sample_text)
+    calibration = resolve_font_calibration(resolved_family, sample_text, style_calibration_key(style))
+    return max(50, min(200, calibration.stretch))
+
+
+def preview_font_path_scale(style: SubtitleStyle, sample_text: str = "") -> tuple[float, float]:
+    resolved_family = resolve_font_family(style.font_family, sample_text)
+    calibration = resolve_font_calibration(resolved_family, sample_text, style_calibration_key(style))
+    return calibration.path_scale_x, calibration.path_scale_y
+
+
+def preview_font_vertical_nudge(style: SubtitleStyle, sample_text: str, pixel_size: int) -> int:
+    resolved_family = resolve_font_family(style.font_family, sample_text)
+    calibration = resolve_font_calibration(resolved_family, sample_text, style_calibration_key(style))
+    return round(max(1, pixel_size) * calibration.y_offset)
+
+
+def preview_font_x_offset(style: SubtitleStyle, sample_text: str, pixel_size: int) -> int:
+    resolved_family = resolve_font_family(style.font_family, sample_text)
+    calibration = resolve_font_calibration(resolved_family, sample_text, style_calibration_key(style))
+    return round(max(1, pixel_size) * calibration.x_offset)
+
+
+def preview_line_height_scale(style: SubtitleStyle, sample_text: str = "") -> float:
+    resolved_family = resolve_font_family(style.font_family, sample_text)
+    calibration = resolve_font_calibration(resolved_family, sample_text, style_calibration_key(style))
+    return calibration.line_height_scale
+
+
+def style_calibration_key(style: SubtitleStyle) -> str:
+    stroke = "stroke:on" if style.stroke_enabled and style.stroke_width > 0 else "stroke:off"
+    if style.stroke_enabled and style.stroke_width > 0:
+        stroke_bucket = round(min(12.0, max(0.0, float(style.stroke_width))) * 2) / 2
+        stroke = f"stroke:{stroke_bucket:g}"
+    shadow = "shadow:on" if style.shadow_enabled and style.shadow_offset > 0 else "shadow:off"
+    background = "bg:on" if style.background_enabled else "bg:off"
+    return f"{stroke}|{shadow}|{background}"
 
 
 def _wrap_one_line(text: str, max_width_units: float) -> list[str]:
@@ -279,7 +331,7 @@ def _repair_thai_tokens(tokens: list[str]) -> list[str]:
 
 def _starts_with_thai_mark(token: str) -> bool:
     first = token[0]
-    return "\u0E31" <= first <= "\u0E4E"
+    return first == "\u0E31" or "\u0E34" <= first <= "\u0E3A" or "\u0E47" <= first <= "\u0E4E"
 
 
 def _looks_like_split_thai_tail(token: str) -> bool:

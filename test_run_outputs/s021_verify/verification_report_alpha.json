@@ -1,0 +1,206 @@
+{
+  "default": [
+    {
+      "cue_index": 1,
+      "time": 0.25,
+      "preview_bbox": [
+        109,
+        1508,
+        970,
+        1673
+      ],
+      "accurate_bbox": [
+        17,
+        1474,
+        1063,
+        1691
+      ],
+      "center_dx": -0.5,
+      "center_dy": 8.0,
+      "width_diff": -185,
+      "height_diff": -52
+    },
+    {
+      "cue_index": 8,
+      "time": 14.65,
+      "preview_bbox": [
+        90,
+        1508,
+        989,
+        1673
+      ],
+      "accurate_bbox": [
+        53,
+        1493,
+        1028,
+        1691
+      ],
+      "center_dx": -1.0,
+      "center_dy": -1.5,
+      "width_diff": -76,
+      "height_diff": -33
+    },
+    {
+      "cue_index": 16,
+      "time": 28.19,
+      "preview_bbox": [
+        226,
+        1508,
+        853,
+        1673
+      ],
+      "accurate_bbox": [
+        208,
+        1488,
+        869,
+        1700
+      ],
+      "center_dx": 1.0,
+      "center_dy": -3.5,
+      "width_diff": -34,
+      "height_diff": -47
+    },
+    {
+      "cue_index": 24,
+      "time": 44.751,
+      "preview_bbox": [
+        168,
+        1632,
+        911,
+        1673
+      ],
+      "accurate_bbox": [
+        113,
+        1617,
+        967,
+        1686
+      ],
+      "center_dx": -0.5,
+      "center_dy": 1.0,
+      "width_diff": -111,
+      "height_diff": -28
+    },
+    {
+      "cue_index": 32,
+      "time": 60.969,
+      "preview_bbox": [
+        168,
+        1632,
+        911,
+        1673
+      ],
+      "accurate_bbox": [
+        97,
+        1602,
+        981,
+        1692
+      ],
+      "center_dx": 0.5,
+      "center_dy": 5.5,
+      "width_diff": -141,
+      "height_diff": -49
+    }
+  ],
+  "tiktok": [
+    {
+      "cue_index": 1,
+      "time": 0.25,
+      "preview_bbox": [
+        32,
+        1240,
+        1046,
+        1741
+      ],
+      "accurate_bbox": [
+        0,
+        1240,
+        1079,
+        1741
+      ],
+      "center_dx": -0.5,
+      "center_dy": 0.0,
+      "width_diff": -65,
+      "height_diff": 0
+    },
+    {
+      "cue_index": 8,
+      "time": 14.65,
+      "preview_bbox": [
+        32,
+        1240,
+        1046,
+        1741
+      ],
+      "accurate_bbox": [
+        32,
+        1240,
+        1047,
+        1741
+      ],
+      "center_dx": -0.5,
+      "center_dy": 0.0,
+      "width_diff": -1,
+      "height_diff": 0
+    },
+    {
+      "cue_index": 16,
+      "time": 28.19,
+      "preview_bbox": [
+        32,
+        1388,
+        1046,
+        1741
+      ],
+      "accurate_bbox": [
+        32,
+        1388,
+        1047,
+        1741
+      ],
+      "center_dx": -0.5,
+      "center_dy": 0.0,
+      "width_diff": -1,
+      "height_diff": 0
+    },
+    {
+      "cue_index": 24,
+      "time": 44.751,
+      "preview_bbox": [
+        32,
+        1536,
+        1046,
+        1741
+      ],
+      "accurate_bbox": [
+        22,
+        1536,
+        1058,
+        1678
+      ],
+      "center_dx": -1.0,
+      "center_dy": 31.5,
+      "width_diff": -22,
+      "height_diff": 63
+    },
+    {
+      "cue_index": 32,
+      "time": 60.969,
+      "preview_bbox": [
+        32,
+        1536,
+        1046,
+        1741
+      ],
+      "accurate_bbox": [
+        2,
+        1536,
+        1075,
+        1741
+      ],
+      "center_dx": 0.5,
+      "center_dy": 0.0,
+      "width_diff": -59,
+      "height_diff": 0
+    }
+  ]
+}

@@ -1,0 +1,143 @@
+{
+  "video": "E:\\Curiosity Channel\\000_Short\\S021 Longus and teeth evident of evolution\\S021_1.mp4",
+  "subtitle": "E:\\Curiosity Channel\\000_Short\\S021 Longus and teeth evident of evolution\\S021_1_edited.srt",
+  "results": [
+    {
+      "font": "Tahoma",
+      "cue_index": 1,
+      "text": "สิ่งมีชีวิตทุกชนิดบนโลกไม่ได้ถูก\nออกแบบมา",
+      "preview_bbox": [
+        248,
+        1493,
+        831,
+        1669
+      ],
+      "accurate_bbox": [
+        17,
+        1474,
+        1063,
+        1691
+      ],
+      "dx": -0.5,
+      "dy": -1.5,
+      "width_diff": -463,
+      "height_diff": -41
+    },
+    {
+      "font": "Noto Sans Thai",
+      "cue_index": 1,
+      "text": "สิ่งมีชีวิตทุกชนิดบนโลกไม่ได้ถูก\nออกแบบมา",
+      "preview_bbox": [
+        320,
+        1494,
+        759,
+        1668
+      ],
+      "accurate_bbox": [
+        107,
+        1489,
+        973,
+        1689
+      ],
+      "dx": -0.5,
+      "dy": -8.0,
+      "width_diff": -427,
+      "height_diff": -26
+    },
+    {
+      "font": "Leelawadee UI",
+      "cue_index": 1,
+      "text": "สิ่งมีชีวิตทุกชนิดบนโลกไม่ได้ถูก\nออกแบบมา",
+      "preview_bbox": [
+        343,
+        1497,
+        736,
+        1667
+      ],
+      "accurate_bbox": [
+        107,
+        1489,
+        973,
+        1689
+      ],
+      "dx": -0.5,
+      "dy": -7.0,
+      "width_diff": -473,
+      "height_diff": -30
+    },
+    {
+      "font": "Arial",
+      "cue_index": 1,
+      "text": "สิ่งมีชีวิตทุกชนิดบนโลกไม่ได้ถูก\nออกแบบมา",
+      "preview_bbox": [
+        299,
+        1496,
+        780,
+        1667
+      ],
+      "accurate_bbox": [
+        107,
+        1489,
+        973,
+        1689
+      ],
+      "dx": -0.5,
+      "dy": -7.5,
+      "width_diff": -385,
+      "height_diff": -29
+    },
+    {
+      "font": "Segoe UI",
+      "cue_index": 1,
+      "text": "สิ่งมีชีวิตทุกชนิดบนโลกไม่ได้ถูก\nออกแบบมา",
+      "preview_bbox": [
+        299,
+        1496,
+        780,
+        1667
+      ],
+      "accurate_bbox": [
+        107,
+        1489,
+        973,
+        1689
+      ],
+      "dx": -0.5,
+      "dy": -7.5,
+      "width_diff": -385,
+      "height_diff": -29
+    }
+  ],
+  "summary": {
+    "Tahoma": {
+      "max_abs_dx": 0.5,
+      "max_abs_dy": 1.5,
+      "max_abs_width_diff": 463,
+      "max_abs_height_diff": 41
+    },
+    "Noto Sans Thai": {
+      "max_abs_dx": 0.5,
+      "max_abs_dy": 8.0,
+      "max_abs_width_diff": 427,
+      "max_abs_height_diff": 26
+    },
+    "Leelawadee UI": {
+      "max_abs_dx": 0.5,
+      "max_abs_dy": 7.0,
+      "max_abs_width_diff": 473,
+      "max_abs_height_diff": 30
+    },
+    "Arial": {
+      "max_abs_dx": 0.5,
+      "max_abs_dy": 7.5,
+      "max_abs_width_diff": 385,
+      "max_abs_height_diff": 29
+    },
+    "Segoe UI": {
+      "max_abs_dx": 0.5,
+      "max_abs_dy": 7.5,
+      "max_abs_width_diff": 385,
+      "max_abs_height_diff": 29
+    }
+  }
+}

@@ -5,21 +5,21 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Iterable
 
+from core.aligner import align_source_cues_to_speech
+from core.quality_checker import check_subtitle_quality
+from core.source_text_handler import has_authoritative_source_text, source_identity
+from core.speech_types import SpeechWord
+from core.subtitle_arranger import arrange_cues_for_readability
 from core.subtitle_layout import wrap_subtitle_text
 from core.style_preset import SubtitleStyle
 from core.subtitle_models import SubtitleCue
+from core.text_normalizer import normalize_asr_text
+from core.timing_refiner import refine_subtitle_timings
 from core.video_info import VideoInfo
 
 
 class SpeechSyncError(RuntimeError):
     """Raised when optional speech-to-text sync cannot run."""
-
-
-@dataclass(slots=True)
-class SpeechWord:
-    text: str
-    start: float
-    end: float
 
 
 @dataclass(slots=True)
@@ -35,6 +35,24 @@ class SpeechSyncOptions:
     max_duration: float = 4.5
     max_words_per_cue: int = 12
     target_chars_per_second: float = 15.0
+    max_chars_per_line: int = 42
+    max_lines: int = 2
+    merge_short_threshold: float = 0.35
+    split_long_threshold: float = 4.5
+    restore_punctuation: bool = True
+    cleanup_noise: bool = True
+    preserve_source_text: bool = True
+    conservative_alignment: bool = True
+
+
+@dataclass(slots=True)
+class SpeechSyncResult:
+    cues: list[SubtitleCue]
+    source_preserved: bool
+    quality_notes: list[str]
+    language: str
+    asr_word_count: int
+    mode: str
 
 
 ProgressCallback = Callable[[int, str], None]
@@ -45,8 +63,9 @@ def transcribe_video_to_cues(
     style: SubtitleStyle,
     *,
     options: SpeechSyncOptions,
+    source_cues: list[SubtitleCue] | None = None,
     progress_callback: ProgressCallback | None = None,
-) -> list[SubtitleCue]:
+) -> SpeechSyncResult:
     """Transcribe the video audio and build subtitle cues from word timestamps.
 
     This feature is optional. It requires `faster-whisper`, but the main app does
@@ -99,16 +118,106 @@ def transcribe_video_to_cues(
 
     language_label = getattr(info, "language", None) or options.language or "auto"
     _emit(progress_callback, 12, f"Detected language: {language_label}")
-    words = _collect_words(segments, video_info.duration, progress_callback)
+    try:
+        words = _collect_words(segments, video_info.duration, progress_callback)
+    except Exception as exc:
+        if _is_cuda_runtime_error(exc):
+            _emit(
+                progress_callback,
+                12,
+                "CUDA/GPU failed while decoding speech timestamps. Retrying with CPU int8.",
+            )
+            try:
+                model = _load_whisper_model(WhisperModel, options, device="cpu", compute_type="int8")
+                segments, info = _transcribe_with_model(model, video_info, options)
+                language_label = getattr(info, "language", None) or options.language or "auto"
+                words = _collect_words(segments, video_info.duration, progress_callback)
+            except Exception as cpu_exc:
+                raise SpeechSyncError(f"Whisper CPU fallback failed while collecting words: {cpu_exc}") from cpu_exc
+        else:
+            raise SpeechSyncError(f"Whisper word timestamp collection failed: {exc}") from exc
     if not words:
         raise SpeechSyncError("No speech words were detected in the video audio.")
 
-    _emit(progress_callback, 86, "Building subtitle cues from speech timing...")
+    if options.preserve_source_text and has_authoritative_source_text(source_cues):
+        _emit(progress_callback, 86, "Aligning source subtitle text to speech timing...")
+        source = list(source_cues or [])
+        source_before = source_identity(source)
+        aligned_cues = align_source_cues_to_speech(
+            source,
+            words,
+            video_info,
+            style,
+            min_duration=options.min_duration,
+            max_duration=options.max_duration,
+            hold_after_sentence=options.hold_after_sentence,
+            max_chars_per_line=options.max_chars_per_line,
+            max_lines=max(1, options.max_lines),
+            preserve_source_text=True,
+        )
+        cues = aligned_cues
+        readable_style = SubtitleStyle.from_dict(style.to_dict())
+        readable_style.max_lines = max(1, options.max_lines)
+        arranged_cues = arrange_cues_for_readability(
+            cues,
+            video_info=video_info,
+            style=readable_style,
+            max_lines=max(1, options.max_lines),
+            min_duration=options.min_duration,
+        )
+        if source_identity(arranged_cues) == source_before:
+            cues = arranged_cues
+        else:
+            _emit(
+                progress_callback,
+                92,
+                "Readability arrange would change source text; keeping protected aligned cues instead.",
+            )
+        source_after = source_identity(cues)
+        notes = check_subtitle_quality(
+            cues,
+            video_info=video_info,
+            style=readable_style,
+            source_identity=source_before,
+            min_duration=options.min_duration,
+            max_chars_per_second=options.target_chars_per_second * 1.2,
+        )
+        if source_before == source_after:
+            _emit(progress_callback, 94, "Source text preserved; Whisper was used for timing only.")
+        else:
+            _emit(progress_callback, 94, "Source text alignment finished with text-preservation warnings.")
+        if not cues:
+            raise SpeechSyncError("Speech was detected, but source text could not be aligned.")
+        _emit(progress_callback, 100, f"Speech Sync aligned {len(cues)} source cue(s).")
+        return SpeechSyncResult(
+            cues=cues,
+            source_preserved=source_before == source_after,
+            quality_notes=notes,
+            language=str(language_label),
+            asr_word_count=len(words),
+            mode="source_alignment",
+        )
+
+    _emit(progress_callback, 86, "Building fallback subtitle cues from ASR timing/text...")
     cues = build_cues_from_words(words, video_info, style, options=options)
     if not cues:
         raise SpeechSyncError("Speech was detected, but no subtitle cues could be built.")
-    _emit(progress_callback, 100, f"Speech Sync generated {len(cues)} subtitle cue(s).")
-    return cues
+    notes = check_subtitle_quality(
+        cues,
+        video_info=video_info,
+        style=style,
+        min_duration=options.min_duration,
+        max_chars_per_second=options.target_chars_per_second * 1.2,
+    )
+    _emit(progress_callback, 100, f"Speech Sync generated {len(cues)} ASR subtitle cue(s).")
+    return SpeechSyncResult(
+        cues=cues,
+        source_preserved=False,
+        quality_notes=notes,
+        language=str(language_label),
+        asr_word_count=len(words),
+        mode="asr_generation",
+    )
 
 
 def _load_whisper_model(
@@ -231,7 +340,7 @@ def _collect_words(
                 words.append(SpeechWord(text=text, start=max(0.0, start), end=max(start + 0.05, end)))
             continue
 
-        text = str(getattr(segment, "text", "") or "").strip()
+        text = _clean_word(str(getattr(segment, "text", "") or ""))
         if not text:
             continue
         start = float(getattr(segment, "start", 0.0) or 0.0)
@@ -314,7 +423,7 @@ def _is_too_dense(text: str, duration: float, options: SpeechSyncOptions) -> boo
 
 
 def _clean_word(text: str) -> str:
-    return text.strip().replace("\n", " ")
+    return normalize_asr_text(text, cleanup_noise=True)
 
 
 def _contains_thai(text: str) -> bool:
