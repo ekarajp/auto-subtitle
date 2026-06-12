@@ -4,4 +4,6 @@ __pycache__/
 *.pyo
 *.ass
 *_subtitled.mp4
+test_run_outputs/
+test/*.mp4
 .idea/

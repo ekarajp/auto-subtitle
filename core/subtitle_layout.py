@@ -6,7 +6,7 @@ from functools import lru_cache
 
 from core.font_calibration import resolve_font_calibration
 from core.font_utils import resolve_font_family
-from core.style_preset import SubtitleStyle, effective_bottom_margin, effective_horizontal_margin
+from core.style_preset import SubtitleStyle, effective_safe_area_insets
 from core.video_info import VideoInfo
 
 
@@ -51,7 +51,7 @@ def wrap_subtitle_text(
 
     resolved_family = resolve_font_family(style.font_family, text)
     calibration = resolve_font_calibration(resolved_family, text, style_calibration_key(style))
-    max_width_px = video_info.width * max(20, min(style.max_width_percent, 100)) / 100
+    max_width_px = subtitle_max_width(video_info, style)
     visual_font_px = max(1.0, style.font_size * WRAP_FONT_SCALE * (1.0 + calibration.wrap_width_adjustment))
     max_width_units = max(4.0, max_width_px / visual_font_px)
 
@@ -75,8 +75,12 @@ def subtitle_line_positions(
     renderer: str,
 ) -> list[tuple[int, int, int]]:
     line_count = max(1, line_count)
-    margin = effective_bottom_margin(video_info, style)
-    safe_x = effective_horizontal_margin(video_info, style)
+    insets = effective_safe_area_insets(video_info, style)
+    safe_left = insets.left
+    safe_top = insets.top
+    safe_right = video_info.width - insets.right
+    safe_bottom = video_info.height - insets.bottom
+    safe_center_x = round((safe_left + safe_right) / 2)
     line_height = subtitle_line_height(style)
     block_height = line_height * line_count
 
@@ -86,18 +90,19 @@ def subtitle_line_positions(
         block_top = base_y - (block_height / 2)
     else:
         if style.alignment == "top_center":
-            block_top = margin
+            block_top = safe_top
         elif style.alignment == "center":
-            block_top = (video_info.height / 2) - (block_height / 2)
+            safe_height = max(1, safe_bottom - safe_top)
+            block_top = safe_top + (safe_height / 2) - (block_height / 2)
         else:
-            block_top = video_info.height - margin - block_height
+            block_top = safe_bottom - block_height
 
         if style.alignment.endswith("_left"):
-            base_x = safe_x
+            base_x = safe_left
         elif style.alignment.endswith("_right"):
-            base_x = video_info.width - safe_x
+            base_x = safe_right
         else:
-            base_x = round(video_info.width / 2)
+            base_x = safe_center_x
 
     ass_alignment = 5
     if style.alignment.endswith("_left"):
@@ -114,8 +119,8 @@ def subtitle_line_positions(
     positions = []
     for idx in range(line_count):
         y = block_top + (idx * line_height) + (line_height / 2) + y_offset
-        y = max(8, min(video_info.height - 8, y))
-        x = max(8, min(video_info.width - 8, base_x))
+        y = max(safe_top, min(safe_bottom, y))
+        x = max(safe_left, min(safe_right, base_x))
         positions.append((round(x), round(y), ass_alignment))
     return positions
 
@@ -125,7 +130,10 @@ def subtitle_line_height(style: SubtitleStyle) -> int:
 
 
 def subtitle_max_width(video_info: VideoInfo, style: SubtitleStyle) -> int:
-    return round(video_info.width * max(20, min(style.max_width_percent, 100)) / 100)
+    requested = round(video_info.width * max(20, min(style.max_width_percent, 100)) / 100)
+    insets = effective_safe_area_insets(video_info, style)
+    safe_width = max(1, video_info.width - insets.horizontal)
+    return max(1, min(requested, safe_width))
 
 
 def preview_baseline_shift(font_size: int, style: SubtitleStyle, sample_text: str = "") -> int:
@@ -255,8 +263,23 @@ def _split_long_token_by_width(text: str, max_width_units: float) -> list[str]:
             if current:
                 chunks.append(current)
             return chunks
-        return [text]
+        return _split_preserving_width(text, max_width_units)
 
+    chunks: list[str] = []
+    current = ""
+    for char in text:
+        candidate = current + char
+        if current and _text_width_units(candidate) > max_width_units and not _is_combining_mark(char):
+            chunks.append(current)
+            current = char
+        else:
+            current = candidate
+    if current:
+        chunks.append(current)
+    return chunks
+
+
+def _split_preserving_width(text: str, max_width_units: float) -> list[str]:
     chunks: list[str] = []
     current = ""
     for char in text:

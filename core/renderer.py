@@ -55,30 +55,12 @@ def render_with_ass(
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     filter_arg = f"ass='{_escape_filter_path(ass_path)}'"
-    command = [
-        ffmpeg,
-        "-y",
-        "-hide_banner",
-        "-i",
-        str(input_path),
-        "-vf",
-        filter_arg,
-        "-c:v",
-        "libx264",
-        "-preset",
-        "medium",
-        "-crf",
-        "18",
-        "-pix_fmt",
-        "yuv420p",
-        "-c:a",
-        "aac",
-        "-b:a",
-        "192k",
-        "-movflags",
-        "+faststart",
-        str(output_path),
-    ]
+    command = _build_render_command(
+        ffmpeg=ffmpeg,
+        input_path=input_path,
+        filter_arg=filter_arg,
+        output_path=output_path,
+    )
 
     if progress_callback:
         progress_callback(0, "Starting FFmpeg render...")
@@ -114,6 +96,44 @@ def render_with_ass(
 
     if progress_callback:
         progress_callback(100, f"Export finished: {output_path}")
+
+
+def _build_render_command(
+    *,
+    ffmpeg: str,
+    input_path: Path,
+    filter_arg: str,
+    output_path: Path,
+) -> list[str]:
+    return [
+        ffmpeg,
+        "-y",
+        "-hide_banner",
+        "-i",
+        str(input_path),
+        "-map",
+        "0:v:0",
+        "-map",
+        "0:a?",
+        "-sn",
+        "-vf",
+        filter_arg,
+        "-c:v",
+        "libx264",
+        "-preset",
+        "medium",
+        "-crf",
+        "18",
+        "-pix_fmt",
+        "yuv420p",
+        "-c:a",
+        "aac",
+        "-b:a",
+        "192k",
+        "-movflags",
+        "+faststart",
+        str(output_path),
+    ]
 
 
 def _escape_filter_path(path: Path) -> str:

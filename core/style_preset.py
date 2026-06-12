@@ -13,7 +13,47 @@ ALIGNMENTS = {
     "top_center": "Top Center",
 }
 
-SAFE_AREA_MODES = ("auto", "landscape", "portrait", "custom")
+SAFE_AREA_MODE_LABELS: dict[str, str] = {
+    "auto": "Auto",
+    "shorts": "YouTube Shorts",
+    "reels": "Instagram Reels",
+    "tiktok": "TikTok",
+    "all": "All Platforms",
+    "landscape": "Landscape",
+    "portrait": "Portrait",
+    "custom": "Custom",
+}
+SAFE_AREA_MODES = tuple(SAFE_AREA_MODE_LABELS)
+
+
+@dataclass(frozen=True, slots=True)
+class SafeAreaInsets:
+    left: int
+    top: int
+    right: int
+    bottom: int
+
+    @property
+    def horizontal(self) -> int:
+        return self.left + self.right
+
+    @property
+    def vertical(self) -> int:
+        return self.top + self.bottom
+
+
+_SAFE_AREA_PERCENT_PRESETS: dict[str, tuple[float, float, float, float]] = {
+    # left, top, right, bottom. Vertical short-form platforms have asymmetric
+    # UI chrome: captions/actions sit mostly on the right and bottom. These
+    # presets are tuned for subtitle placement, not full ad/key-visual safety
+    # templates, so they avoid over-compressing readable captions.
+    "landscape": (6.0, 7.0, 6.0, 7.0),
+    "portrait": (6.0, 10.0, 6.0, 10.0),
+    "shorts": (6.0, 10.0, 10.0, 18.0),
+    "reels": (6.0, 14.0, 8.0, 20.0),
+    "tiktok": (6.0, 10.0, 12.0, 20.0),
+    "all": (6.0, 14.0, 12.0, 20.0),
+}
 
 
 @dataclass(slots=True)
@@ -56,12 +96,15 @@ class SubtitleStyle:
 STYLE_PRESETS: dict[str, SubtitleStyle] = {
     "Clean": SubtitleStyle(max_width_percent=88, stroke_width=2.5),
     "YouTube": SubtitleStyle(font_family="Arial", font_size=50, stroke_width=3.5, max_width_percent=90),
+    "Shorts": SubtitleStyle(font_family="Arial", font_size=54, stroke_width=3.5, max_width_percent=88, safe_area_mode="shorts"),
+    "Reels": SubtitleStyle(font_size=54, stroke_width=3.5, max_width_percent=86, safe_area_mode="reels"),
     "TikTok": SubtitleStyle(
         font_size=58,
         stroke_width=4.0,
         background_enabled=True,
         background_opacity=35,
         max_width_percent=84,
+        safe_area_mode="tiktok",
         custom_y_percent=78,
     ),
     "Documentary": SubtitleStyle(
@@ -104,17 +147,7 @@ def style_with_overrides(style: SubtitleStyle, overrides: dict[str, object] | No
 
 
 def auto_bottom_margin(video_info: VideoInfo, style: SubtitleStyle) -> int:
-    mode = style.safe_area_mode
-    height = video_info.height
-    if mode == "custom":
-        percent = style.custom_safe_area_percent
-    elif mode == "portrait" or (mode == "auto" and video_info.orientation == "portrait"):
-        percent = 10
-    elif mode == "landscape" or (mode == "auto" and video_info.orientation == "landscape"):
-        percent = 7
-    else:
-        percent = 8
-    return max(18, round(height * percent / 100))
+    return safe_area_insets(video_info, style).bottom
 
 
 def effective_bottom_margin(video_info: VideoInfo, style: SubtitleStyle) -> int:
@@ -124,11 +157,55 @@ def effective_bottom_margin(video_info: VideoInfo, style: SubtitleStyle) -> int:
 
 
 def auto_horizontal_margin(video_info: VideoInfo, style: SubtitleStyle) -> int:
-    del style
-    return max(16, round(video_info.width * 0.06))
+    insets = safe_area_insets(video_info, style)
+    return max(insets.left, insets.right)
 
 
 def effective_horizontal_margin(video_info: VideoInfo, style: SubtitleStyle) -> int:
     if style.horizontal_margin > 0:
         return style.horizontal_margin
     return auto_horizontal_margin(video_info, style)
+
+
+def safe_area_insets(video_info: VideoInfo, style: SubtitleStyle) -> SafeAreaInsets:
+    mode = normalized_safe_area_mode(style.safe_area_mode, video_info)
+    if mode == "custom":
+        percent = max(1, min(30, style.custom_safe_area_percent))
+        left_pct = top_pct = right_pct = bottom_pct = float(percent)
+    else:
+        left_pct, top_pct, right_pct, bottom_pct = _SAFE_AREA_PERCENT_PRESETS[mode]
+
+    return SafeAreaInsets(
+        left=max(16, round(video_info.width * left_pct / 100)),
+        top=max(18, round(video_info.height * top_pct / 100)),
+        right=max(16, round(video_info.width * right_pct / 100)),
+        bottom=max(18, round(video_info.height * bottom_pct / 100)),
+    )
+
+
+def effective_safe_area_insets(video_info: VideoInfo, style: SubtitleStyle) -> SafeAreaInsets:
+    insets = safe_area_insets(video_info, style)
+    horizontal = style.horizontal_margin if style.horizontal_margin > 0 else None
+    vertical = style.bottom_margin if style.bottom_margin > 0 else None
+    return SafeAreaInsets(
+        left=max(16, horizontal) if horizontal is not None else insets.left,
+        top=max(18, vertical) if vertical is not None else insets.top,
+        right=max(16, horizontal) if horizontal is not None else insets.right,
+        bottom=max(18, vertical) if vertical is not None else insets.bottom,
+    )
+
+
+def normalized_safe_area_mode(mode: str, video_info: VideoInfo) -> str:
+    if mode == "auto":
+        if video_info.orientation == "portrait":
+            return "portrait"
+        if video_info.orientation == "landscape":
+            return "landscape"
+        return "portrait"
+    if mode in _SAFE_AREA_PERCENT_PRESETS or mode == "custom":
+        return mode
+    return "all"
+
+
+def safe_area_label(mode: str) -> str:
+    return SAFE_AREA_MODE_LABELS.get(mode, mode.title())

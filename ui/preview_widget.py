@@ -1,15 +1,17 @@
 from __future__ import annotations
 
 import os
+import threading
 from pathlib import Path
 
-from PySide6.QtCore import QPointF, QSignalBlocker, QSize, QTimer, QUrl, Qt, Signal
-from PySide6.QtGui import QColor, QFont, QFontMetrics, QImage, QKeySequence, QPainter, QPainterPath, QPen, QShortcut, QTransform
+from PySide6.QtCore import QObject, QPointF, QRectF, QSignalBlocker, QSize, QThread, QTimer, QUrl, Qt, Signal
+from PySide6.QtGui import QColor, QFont, QFontMetrics, QImage, QKeySequence, QPainter, QPen, QShortcut
 from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer, QVideoSink
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QDialog,
+    QFileDialog,
     QFrame,
     QHBoxLayout,
     QLabel,
@@ -23,6 +25,7 @@ from PySide6.QtWidgets import (
 )
 
 from core.font_utils import resolve_font_details, resolve_font_family
+from core.preview_renderer import PreviewRenderError, default_preview_cache_dir, render_accurate_preview_frame
 from core.subtitle_layout import (
     preview_baseline_shift,
     preview_font_path_scale,
@@ -40,8 +43,7 @@ from core.subtitle_layout import (
 )
 from core.style_preset import (
     SubtitleStyle,
-    effective_bottom_margin,
-    effective_horizontal_margin,
+    effective_safe_area_insets,
     style_with_overrides,
 )
 from core.subtitle_models import SubtitleCue
@@ -61,6 +63,10 @@ ZOOM_PRESETS: tuple[tuple[str, str | float], ...] = (
     ("150%", 1.50),
     ("200%", 2.00),
 )
+
+PREVIEW_MODE_FAST = "fast"
+PREVIEW_MODE_QUALITY = "quality"
+QUALITY_PREVIEW_AVAILABLE = False
 
 
 class VideoSubtitleCanvas(QWidget):
@@ -83,6 +89,11 @@ class VideoSubtitleCanvas(QWidget):
         self._frame_image: QImage | None = None
         self._frame_has_subtitles = False
         self._source_has_subtitles = False
+        self._quality_preview_enabled = False
+        self._quality_preview_image: QImage | None = None
+        self._quality_preview_position_seconds: float | None = None
+        self._quality_preview_pending = False
+        self._quality_preview_message = ""
         self._show_safe_area_guides = True
         self._font_resolution_sample = ""
         self._debug_text_layout = os.environ.get("SMART_SUBTITLE_DEBUG_TEXT", "").strip() == "1"
@@ -97,7 +108,7 @@ class VideoSubtitleCanvas(QWidget):
         self.update()
 
     def set_style(self, style: SubtitleStyle) -> None:
-        self._style = style
+        self._style = SubtitleStyle.from_dict(style.to_dict())
         self._refresh_resolved_font_sample()
         self.update()
 
@@ -137,6 +148,29 @@ class VideoSubtitleCanvas(QWidget):
         self._frame_has_subtitles = has_subtitles
         self.update()
 
+    def set_quality_preview_enabled(self, enabled: bool) -> None:
+        self._quality_preview_enabled = bool(enabled)
+        self.update()
+
+    def set_quality_preview_image(self, image: QImage, position_seconds: float) -> None:
+        self._quality_preview_image = image.copy()
+        self._quality_preview_position_seconds = max(0.0, position_seconds)
+        self._quality_preview_pending = False
+        self._quality_preview_message = ""
+        self.update()
+
+    def clear_quality_preview_image(self) -> None:
+        self._quality_preview_image = None
+        self._quality_preview_position_seconds = None
+        self._quality_preview_pending = False
+        self._quality_preview_message = ""
+        self.update()
+
+    def set_quality_preview_pending(self, pending: bool, message: str = "") -> None:
+        self._quality_preview_pending = bool(pending)
+        self._quality_preview_message = message
+        self.update()
+
     def paintEvent(self, event) -> None:  # noqa: N802 - Qt override
         del event
         painter = QPainter(self)
@@ -153,16 +187,68 @@ class VideoSubtitleCanvas(QWidget):
             painter.setFont(QFont("Segoe UI", 11))
             painter.drawText(video_rect, Qt.AlignmentFlag.AlignCenter, "Select a video, then press Play")
 
+        cue = self._active_cue()
+        drew_quality_preview = False
+        quality_preview_active = self._quality_preview_enabled and not self._source_has_subtitles
+        if (
+            cue
+            and self._video_info
+            and quality_preview_active
+            and self._quality_preview_matches_position()
+            and self._quality_preview_image
+            and not self._quality_preview_image.isNull()
+        ):
+            painter.drawImage(video_rect, self._quality_preview_image)
+            drew_quality_preview = True
+
         painter.setPen(QPen(QColor("#D7DEE7"), 1))
         painter.drawRect(video_rect.adjusted(0, 0, -1, -1))
         self._last_text_diagnostics = {}
 
-        cue = self._active_cue()
         if self._video_info and self._show_safe_area_guides:
             self._draw_safe_area_guides(painter, video_rect, cue)
-        if cue and self._video_info and not self._frame_has_subtitles and not self._source_has_subtitles:
+        if (
+            cue
+            and self._video_info
+            and not drew_quality_preview
+            and not quality_preview_active
+            and not self._frame_has_subtitles
+            and not self._source_has_subtitles
+        ):
             self._draw_subtitle(painter, video_rect, cue)
+        if self._quality_preview_enabled and self._quality_preview_pending:
+            self._draw_quality_preview_status(painter, video_rect)
         painter.end()
+
+    def _quality_preview_matches_position(self) -> bool:
+        if self._quality_preview_position_seconds is None:
+            return False
+        return abs(self._quality_preview_position_seconds - self._position_seconds) <= 0.08
+
+    def _draw_quality_preview_status(self, painter: QPainter, video_rect) -> None:
+        message = self._quality_preview_message or "Quality preview..."
+        painter.save()
+        font = QFont("Segoe UI", 9)
+        painter.setFont(font)
+        metrics = QFontMetrics(font)
+        padding_x = 8
+        padding_y = 5
+        width = metrics.horizontalAdvance(message) + padding_x * 2
+        height = metrics.height() + padding_y * 2
+        rect = video_rect.__class__(
+            video_rect.left() + 10,
+            video_rect.top() + 10,
+            width,
+            height,
+        )
+        bg = QColor("#111827")
+        bg.setAlpha(210)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(bg)
+        painter.drawRoundedRect(rect, 4, 4)
+        painter.setPen(QColor("#E5E7EB"))
+        painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, message)
+        painter.restore()
 
     def _active_cue(self) -> SubtitleCue | None:
         # Prefer the row the user explicitly selected so Preview Selected is immediate.
@@ -381,7 +467,11 @@ class VideoSubtitleCanvas(QWidget):
         stroke_color: QColor | None,
         stroke_width: int,
     ) -> None:
-        path = self._build_text_path(
+        painter.save()
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        painter.setRenderHint(QPainter.RenderHint.TextAntialiasing, True)
+        painter.setFont(font)
+        origin = self._text_draw_origin(
             text_rect,
             text,
             font,
@@ -391,19 +481,23 @@ class VideoSubtitleCanvas(QWidget):
             baseline_shift,
             vertical_nudge,
         )
-        painter.save()
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-        painter.setRenderHint(QPainter.RenderHint.TextAntialiasing, True)
         if stroke_color and stroke_width > 0:
-            pen = QPen(stroke_color)
-            pen.setWidthF(max(0.5, stroke_width * 2.0))
-            pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
-            pen.setCapStyle(Qt.PenCapStyle.RoundCap)
-            painter.strokePath(path, pen)
-        painter.fillPath(path, fill_color)
+            painter.setPen(stroke_color)
+            radius = max(1, min(8, round(stroke_width)))
+            offsets = []
+            for dx in range(-radius, radius + 1):
+                for dy in range(-radius, radius + 1):
+                    if dx == 0 and dy == 0:
+                        continue
+                    if (dx * dx + dy * dy) <= radius * radius:
+                        offsets.append((dx, dy))
+            for dx, dy in offsets:
+                painter.drawText(QPointF(origin.x() + dx, origin.y() + dy), text)
+        painter.setPen(fill_color)
+        painter.drawText(origin, text)
         painter.restore()
 
-    def _build_text_path(
+    def _text_draw_origin(
         self,
         text_rect,
         text: str,
@@ -413,27 +507,24 @@ class VideoSubtitleCanvas(QWidget):
         horizontal_nudge: int,
         baseline_shift: int,
         vertical_nudge: int,
-    ) -> QPainterPath:
-        sample_path = QPainterPath()
-        sample_path.addText(QPointF(0.0, 0.0), font, text)
+    ) -> QPointF:
+        metrics = QFontMetrics(font)
         scale_x, scale_y = path_scale
-        if abs(scale_x - 1.0) > 0.001 or abs(scale_y - 1.0) > 0.001:
-            sample_path = QTransform().scale(scale_x, scale_y).map(sample_path)
-        bounds = sample_path.boundingRect()
+        text_width = metrics.horizontalAdvance(text) * scale_x
+        text_height = metrics.height() * scale_y
 
         if ass_alignment == 4:
-            x = text_rect.left() - bounds.left()
+            x = text_rect.left()
         elif ass_alignment == 6:
-            x = text_rect.right() - bounds.right()
+            x = text_rect.right() - text_width
         else:
-            x = text_rect.left() + (text_rect.width() - bounds.width()) / 2 - bounds.left()
+            x = text_rect.left() + (text_rect.width() - text_width) / 2
         x += horizontal_nudge
 
-        y = text_rect.top() + (text_rect.height() - bounds.height()) / 2 - bounds.top()
+        y = text_rect.top() + (text_rect.height() - text_height) / 2 + (metrics.ascent() * scale_y)
         y += baseline_shift
         y += vertical_nudge
-        sample_path.translate(x, y)
-        return sample_path
+        return QPointF(x, y)
 
     def _measure_text_path(
         self,
@@ -445,8 +536,8 @@ class VideoSubtitleCanvas(QWidget):
         horizontal_nudge: int,
         baseline_shift: int,
         vertical_nudge: int,
-    ):
-        return self._build_text_path(
+    ) -> QRectF:
+        origin = self._text_draw_origin(
             text_rect,
             text,
             font,
@@ -455,7 +546,15 @@ class VideoSubtitleCanvas(QWidget):
             horizontal_nudge,
             baseline_shift,
             vertical_nudge,
-        ).boundingRect()
+        )
+        metrics = QFontMetrics(font)
+        scale_x, scale_y = path_scale
+        return QRectF(
+            origin.x(),
+            origin.y() - (metrics.ascent() * scale_y),
+            metrics.horizontalAdvance(text) * scale_x,
+            metrics.height() * scale_y,
+        )
 
     def _draw_debug_guides(self, painter: QPainter, bbox, anchor: QPointF, text_rect) -> None:
         painter.save()
@@ -474,13 +573,12 @@ class VideoSubtitleCanvas(QWidget):
         guide_style = style_with_overrides(self._style, cue.style_overrides) if cue else self._style
         scale_x = video_rect.width() / max(1, self._video_info.width)
         scale_y = video_rect.height() / max(1, self._video_info.height)
-        safe_x = effective_horizontal_margin(self._video_info, guide_style)
-        safe_y = effective_bottom_margin(self._video_info, guide_style)
+        insets = effective_safe_area_insets(self._video_info, guide_style)
 
-        left = round(video_rect.left() + safe_x * scale_x)
-        right = round(video_rect.right() - safe_x * scale_x)
-        top = round(video_rect.top() + safe_y * scale_y)
-        bottom = round(video_rect.bottom() - safe_y * scale_y)
+        left = round(video_rect.left() + insets.left * scale_x)
+        right = round(video_rect.right() - insets.right * scale_x)
+        top = round(video_rect.top() + insets.top * scale_y)
+        bottom = round(video_rect.bottom() - insets.bottom * scale_y)
         rect = video_rect.__class__(left, top, max(1, right - left), max(1, bottom - top))
 
         painter.save()
@@ -501,10 +599,6 @@ class VideoSubtitleCanvas(QWidget):
             painter.drawLine(anchor_x, anchor_y - 10, anchor_x, anchor_y + 10)
             painter.drawEllipse(QPointF(anchor_x, anchor_y), 4, 4)
 
-        painter.setPen(QColor("#DDF4FF"))
-        painter.setFont(QFont("Segoe UI", 9))
-        label = f"Safe area X {safe_x}px | Y {safe_y}px"
-        painter.drawText(rect.adjusted(8, 8, -8, -8), Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft, label)
         painter.restore()
 
     def _refresh_resolved_font_sample(self) -> None:
@@ -704,12 +798,64 @@ class PreviewViewport(QWidget):
         scroll_bar.setValue(max(scroll_bar.minimum(), min(scroll_bar.maximum(), value)))
 
 
+class QualityPreviewWorker(QObject):
+    finished = Signal(int, int, object)
+    failed = Signal(int, str)
+
+    def __init__(
+        self,
+        *,
+        request_id: int,
+        video_info: VideoInfo,
+        cues: list[SubtitleCue],
+        style: SubtitleStyle,
+        position_ms: int,
+        cache_dir: Path,
+    ) -> None:
+        super().__init__()
+        self.request_id = request_id
+        self.video_info = video_info
+        self.cues = [
+            SubtitleCue(cue.index, cue.start, cue.end, cue.text, dict(cue.style_overrides))
+            for cue in cues
+        ]
+        self.style = SubtitleStyle.from_dict(style.to_dict())
+        self.position_ms = max(0, int(position_ms))
+        self.cache_dir = cache_dir
+        self._cancel_event = threading.Event()
+
+    def cancel(self) -> None:
+        self._cancel_event.set()
+
+    def run(self) -> None:
+        try:
+            png_bytes = render_accurate_preview_frame(
+                video_info=self.video_info,
+                cues=self.cues,
+                style=self.style,
+                position_seconds=self.position_ms / 1000.0,
+                cache_dir=self.cache_dir,
+                cancel_event=self._cancel_event,
+            )
+        except PreviewRenderError as exc:
+            if not self._cancel_event.is_set():
+                self.failed.emit(self.request_id, str(exc))
+        except Exception as exc:  # pragma: no cover - defensive Qt worker boundary
+            if not self._cancel_event.is_set():
+                self.failed.emit(self.request_id, str(exc))
+        else:
+            if not self._cancel_event.is_set():
+                self.finished.emit(self.request_id, self.position_ms, png_bytes)
+
+
 class SubtitlePreviewWidget(QWidget):
     """Real-time video preview using the same subtitle data that will be exported."""
 
     activeCueChanged = Signal(int)
     accuratePreviewRequested = Signal(int)
     accurateVideoRequested = Signal()
+    previewModeChanged = Signal(str)
+    qualityPreviewCacheDirChanged = Signal(str)
 
     def __init__(self, parent: QWidget | None = None, *, allow_fullscreen: bool = True) -> None:
         super().__init__(parent)
@@ -726,6 +872,14 @@ class SubtitlePreviewWidget(QWidget):
         self._play_requested = False
         self._full_preview_dialog: QDialog | None = None
         self._last_active_cue_index = -1
+        self._preview_mode = PREVIEW_MODE_FAST
+        self._quality_preview_cache_dir = default_preview_cache_dir()
+        self._quality_preview_request_id = 0
+        self._quality_preview_thread: QThread | None = None
+        self._quality_preview_worker: QualityPreviewWorker | None = None
+        self._quality_preview_needs_rerender = False
+        self._exact_preview_busy = False
+        self._shutting_down = False
 
         self.player = QMediaPlayer(self)
         self.audio_output = QAudioOutput(self)
@@ -759,11 +913,28 @@ class SubtitlePreviewWidget(QWidget):
         self.accurate_video_button.setProperty("variant", "preview")
         self.accurate_video_button.setToolTip("Render a temporary preview video with FFmpeg/libass, then play it here.")
         self.accurate_video_button.clicked.connect(self.request_accurate_video)
+
+        self.preview_mode_combo = QComboBox()
+        self.preview_mode_combo.addItem("Fast", PREVIEW_MODE_FAST)
+        if QUALITY_PREVIEW_AVAILABLE:
+            self.preview_mode_combo.addItem("Quality", PREVIEW_MODE_QUALITY)
+        self.preview_mode_combo.setMinimumWidth(88)
+        self.preview_mode_combo.setMaximumWidth(118)
+        self.preview_mode_combo.setToolTip("Live preview mode. FFmpeg/libass is still used for export and manual frame render.")
+        self.preview_mode_combo.currentIndexChanged.connect(self._preview_mode_combo_changed)
+
+        self.cache_dir_button = QPushButton("Cache")
+        self.cache_dir_button.setProperty("variant", "preview")
+        self.cache_dir_button.setToolTip(f"Quality preview cache: {self._quality_preview_cache_dir}")
+        self.cache_dir_button.clicked.connect(self.choose_quality_preview_cache_dir)
+        self.cache_dir_button.setVisible(QUALITY_PREVIEW_AVAILABLE)
+        self.preview_mode_combo.setVisible(QUALITY_PREVIEW_AVAILABLE)
         for button in (
             self.play_button,
             self.full_preview_button,
             self.accurate_preview_button,
             self.accurate_video_button,
+            self.cache_dir_button,
         ):
             button.setMinimumWidth(0)
             button.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
@@ -807,6 +978,8 @@ class SubtitlePreviewWidget(QWidget):
 
         button_row = QHBoxLayout()
         button_row.setSpacing(5)
+        button_row.addWidget(self.preview_mode_combo)
+        button_row.addWidget(self.cache_dir_button)
         button_row.addWidget(self.play_button)
         button_row.addWidget(self.full_preview_button)
         button_row.addWidget(self.accurate_preview_button)
@@ -837,10 +1010,18 @@ class SubtitlePreviewWidget(QWidget):
         self.player.playbackStateChanged.connect(self._playback_state_changed)
         self.preview_view.set_view_margin(int(self.fit_margin_spin.value()))
         self.canvas.set_show_safe_area_guides(self.safe_area_guide_check.isChecked())
+        self.canvas.set_quality_preview_enabled(False)
+        self._quality_preview_debounce = QTimer(self)
+        self._quality_preview_debounce.setSingleShot(True)
+        self._quality_preview_debounce.setInterval(350)
+        self._quality_preview_debounce.timeout.connect(self._start_quality_preview_render)
+        self._refresh_exact_preview_button_state()
 
     def set_video_info(self, info: VideoInfo | None) -> None:
         self._video_info = info
         self.preview_view.set_video_info(info)
+        self.canvas.clear_quality_preview_image()
+        self._queue_quality_preview(force=True)
 
     def set_video_path(self, path: str | Path, *, source_has_subtitles: bool = False) -> None:
         self._video_path = Path(path).resolve()
@@ -851,6 +1032,66 @@ class SubtitlePreviewWidget(QWidget):
         self.player.setSource(QUrl.fromLocalFile(str(self._video_path)))
         self.seek_to(0)
 
+    def preview_mode(self) -> str:
+        return self._preview_mode
+
+    def set_preview_mode(self, mode: str) -> None:
+        normalized = (
+            PREVIEW_MODE_QUALITY
+            if QUALITY_PREVIEW_AVAILABLE and mode == PREVIEW_MODE_QUALITY
+            else PREVIEW_MODE_FAST
+        )
+        if normalized == self._preview_mode:
+            return
+        self._preview_mode = normalized
+        with QSignalBlocker(self.preview_mode_combo):
+            for index in range(self.preview_mode_combo.count()):
+                if self.preview_mode_combo.itemData(index) == normalized:
+                    self.preview_mode_combo.setCurrentIndex(index)
+                    break
+        self.canvas.set_quality_preview_enabled(normalized == PREVIEW_MODE_QUALITY)
+        if normalized == PREVIEW_MODE_FAST:
+            self._quality_preview_debounce.stop()
+            self.canvas.clear_quality_preview_image()
+        else:
+            self._queue_quality_preview(force=True)
+        self._refresh_exact_preview_button_state()
+        self.previewModeChanged.emit(normalized)
+
+    def set_exact_preview_busy(self, busy: bool) -> None:
+        self._exact_preview_busy = bool(busy)
+        self._refresh_exact_preview_button_state()
+
+    def defer_quality_preview(self) -> None:
+        if self._preview_mode != PREVIEW_MODE_QUALITY:
+            return
+        self._quality_preview_debounce.stop()
+        if self._quality_preview_thread is not None:
+            self._quality_preview_needs_rerender = True
+
+    def quality_preview_cache_dir(self) -> Path:
+        return self._quality_preview_cache_dir
+
+    def set_quality_preview_cache_dir(self, path: str | Path) -> None:
+        cache_dir = Path(path).expanduser().resolve()
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        if cache_dir == self._quality_preview_cache_dir:
+            return
+        self._quality_preview_cache_dir = cache_dir
+        self.cache_dir_button.setToolTip(f"Quality preview cache: {cache_dir}")
+        self.canvas.clear_quality_preview_image()
+        self.qualityPreviewCacheDirChanged.emit(str(cache_dir))
+        self._queue_quality_preview(force=True)
+
+    def choose_quality_preview_cache_dir(self) -> None:
+        chosen = QFileDialog.getExistingDirectory(
+            self,
+            "Quality Preview Cache",
+            str(self._quality_preview_cache_dir),
+        )
+        if chosen:
+            self.set_quality_preview_cache_dir(chosen)
+
     def reset_to_original_video(self) -> None:
         if self._source_has_subtitles and self._original_video_path:
             self.set_video_path(self._original_video_path, source_has_subtitles=False)
@@ -858,11 +1099,15 @@ class SubtitlePreviewWidget(QWidget):
     def set_style(self, style: SubtitleStyle) -> None:
         self._style = SubtitleStyle.from_dict(style.to_dict())
         self.canvas.set_style(style)
+        self.canvas.clear_quality_preview_image()
+        self._queue_quality_preview(force=True)
 
     def set_cues(self, cues: list[SubtitleCue]) -> None:
         self._cues = list(cues)
         self._last_active_cue_index = -1
         self.canvas.set_cues(cues)
+        self.canvas.clear_quality_preview_image()
+        self._queue_quality_preview(force=True)
 
     def set_sample_cue(self, cue: SubtitleCue | None) -> None:
         self.canvas.set_selected_cue(cue, force_preview=True)
@@ -882,6 +1127,7 @@ class SubtitlePreviewWidget(QWidget):
         self.player.setPosition(milliseconds)
         self.canvas.set_position(milliseconds / 1000.0)
         self._update_time_label(milliseconds, self.player.duration())
+        self._queue_quality_preview()
 
     def show_accurate_preview_image(self, image: QImage, milliseconds: int) -> None:
         self.pause_playback()
@@ -890,12 +1136,36 @@ class SubtitlePreviewWidget(QWidget):
         self._update_time_label(milliseconds, self.player.duration())
 
     def request_accurate_preview(self) -> None:
+        if not self.accurate_preview_button.isEnabled():
+            return
         self.pause_playback()
         self.accuratePreviewRequested.emit(self.player.position())
 
     def request_accurate_video(self) -> None:
         self.pause_playback()
         self.accurateVideoRequested.emit()
+
+    def closeEvent(self, event) -> None:  # noqa: N802 - Qt override
+        self.shutdown()
+        super().closeEvent(event)
+
+    def shutdown(self) -> None:
+        self._shutting_down = True
+        self._quality_preview_debounce.stop()
+        self._quality_preview_needs_rerender = False
+        self._play_requested = False
+        self._accept_frames = False
+        if self._quality_preview_worker is not None:
+            self._quality_preview_worker.cancel()
+        try:
+            self.video_sink.videoFrameChanged.disconnect(self._video_frame_changed)
+        except (RuntimeError, TypeError):
+            pass
+        self.player.blockSignals(True)
+        self.player.stop()
+        if self._quality_preview_thread is not None:
+            self._quality_preview_thread.quit()
+            self._quality_preview_thread.wait(1500)
 
     def toggle_playback(self) -> None:
         if self._play_requested:
@@ -904,6 +1174,7 @@ class SubtitlePreviewWidget(QWidget):
             self._play_requested = True
             self._accept_frames = True
             self.canvas.clear_forced_selected_preview()
+            self.canvas.clear_quality_preview_image()
             self.player.play()
             self.play_button.setText("Pause")
 
@@ -915,6 +1186,7 @@ class SubtitlePreviewWidget(QWidget):
         self.player.setPosition(current_position)
         self.canvas.set_position(current_position / 1000.0)
         self.play_button.setText("Play")
+        self._queue_quality_preview()
 
     def open_full_preview(self) -> None:
         if not self._video_path or not self._video_info:
@@ -938,6 +1210,8 @@ class SubtitlePreviewWidget(QWidget):
         preview.set_style(self._style)
         preview.set_cues(self._cues)
         preview.set_video_path(self._video_path)
+        preview.set_quality_preview_cache_dir(self._quality_preview_cache_dir)
+        preview.set_preview_mode(self._preview_mode)
         preview._set_zoom_combo_data(self.zoom_combo.currentData())
         preview.fit_margin_spin.setValue(self.fit_margin_spin.value())
         preview.safe_area_guide_check.setChecked(self.safe_area_guide_check.isChecked())
@@ -950,12 +1224,17 @@ class SubtitlePreviewWidget(QWidget):
             zoom_value = preview.zoom_combo.currentData()
             margin_value = preview.fit_margin_spin.value()
             guide_value = preview.safe_area_guide_check.isChecked()
+            preview_mode = preview.preview_mode()
+            cache_dir = preview.quality_preview_cache_dir()
             preview.pause_playback()
             preview.player.stop()
+            self.set_quality_preview_cache_dir(cache_dir)
+            self.set_preview_mode(preview_mode)
             self._set_zoom_combo_data(zoom_value)
             self.fit_margin_spin.setValue(margin_value)
             self.safe_area_guide_check.setChecked(guide_value)
             self.seek_to(position)
+            preview.shutdown()
 
         QShortcut(QKeySequence(Qt.Key.Key_Escape), dialog, dialog.close)
         dialog.finished.connect(sync_back_from_full_preview)
@@ -972,6 +1251,10 @@ class SubtitlePreviewWidget(QWidget):
         image = frame.toImage()
         if not image.isNull():
             self.canvas.set_frame_image(image, has_subtitles=self._source_has_subtitles)
+            if not self._play_requested and self.player.playbackState() != QMediaPlayer.PlaybackState.PlayingState:
+                self._accept_frames = False
+            if self._preview_mode == PREVIEW_MODE_QUALITY and not self._play_requested:
+                self._queue_quality_preview()
 
     def _position_changed(self, position: int) -> None:
         if not self.position_slider.isSliderDown():
@@ -983,6 +1266,8 @@ class SubtitlePreviewWidget(QWidget):
         if active_index != self._last_active_cue_index:
             self._last_active_cue_index = active_index
             self.activeCueChanged.emit(active_index)
+        if self._preview_mode == PREVIEW_MODE_QUALITY and not self._play_requested:
+            self._queue_quality_preview()
 
     def _duration_changed(self, duration: int) -> None:
         self.position_slider.setRange(0, max(0, duration))
@@ -996,6 +1281,8 @@ class SubtitlePreviewWidget(QWidget):
                 self._play_requested = False
                 self._accept_frames = False
         self.play_button.setText("Pause" if self._play_requested else "Play")
+        if state != QMediaPlayer.PlaybackState.PlayingState:
+            self._queue_quality_preview()
 
     def _update_time_label(self, position: int, duration: int) -> None:
         self.time_label.setText(
@@ -1012,6 +1299,113 @@ class SubtitlePreviewWidget(QWidget):
 
     def _safe_area_guide_changed(self, enabled: bool) -> None:
         self.canvas.set_show_safe_area_guides(enabled)
+
+    def _preview_mode_combo_changed(self, *args) -> None:
+        del args
+        self.set_preview_mode(str(self.preview_mode_combo.currentData()))
+
+    def _refresh_exact_preview_button_state(self) -> None:
+        enabled = not self._exact_preview_busy
+        self.accurate_preview_button.setProperty(
+            "previewDisabled",
+            "busy" if self._exact_preview_busy else "",
+        )
+        self.accurate_preview_button.setEnabled(enabled)
+        self.accurate_preview_button.style().unpolish(self.accurate_preview_button)
+        self.accurate_preview_button.style().polish(self.accurate_preview_button)
+        self.accurate_preview_button.update()
+        if self._exact_preview_busy:
+            self.accurate_preview_button.setToolTip("Rendering exact preview frame with FFmpeg/libass...")
+        else:
+            self.accurate_preview_button.setToolTip(
+                "Render this frame with FFmpeg/libass, the same engine used by export."
+            )
+
+    def _queue_quality_preview(self, *, force: bool = False) -> None:
+        if not QUALITY_PREVIEW_AVAILABLE:
+            return
+        if self._shutting_down:
+            return
+        if self._preview_mode != PREVIEW_MODE_QUALITY:
+            return
+        if self._play_requested or self.player.playbackState() == QMediaPlayer.PlaybackState.PlayingState:
+            return
+        if not self._video_info or not self._video_path or self._source_has_subtitles:
+            self.canvas.clear_quality_preview_image()
+            return
+        if not self._cues:
+            self.canvas.clear_quality_preview_image()
+            return
+        if self._quality_preview_thread is not None:
+            self._quality_preview_needs_rerender = True
+            return
+        if force:
+            self._quality_preview_debounce.stop()
+        self.canvas.set_quality_preview_enabled(True)
+        self.canvas.set_quality_preview_pending(True)
+        self._quality_preview_debounce.start(500 if force else 350)
+
+    def _start_quality_preview_render(self) -> None:
+        if self._shutting_down:
+            return
+        if self._preview_mode != PREVIEW_MODE_QUALITY:
+            return
+        if self._quality_preview_thread is not None:
+            self._quality_preview_needs_rerender = True
+            return
+        if not self._video_info or not self._video_path or self._source_has_subtitles or not self._cues:
+            self.canvas.set_quality_preview_pending(False)
+            return
+
+        self._quality_preview_request_id += 1
+        request_id = self._quality_preview_request_id
+        position_ms = max(0, int(self.player.position()))
+        self.canvas.set_quality_preview_pending(True)
+
+        thread = QThread(self)
+        worker = QualityPreviewWorker(
+            request_id=request_id,
+            video_info=self._video_info,
+            cues=self._cues,
+            style=self._style,
+            position_ms=position_ms,
+            cache_dir=self._quality_preview_cache_dir,
+        )
+        worker.moveToThread(thread)
+        thread.started.connect(worker.run)
+        worker.finished.connect(self._quality_preview_finished)
+        worker.failed.connect(self._quality_preview_failed)
+        worker.finished.connect(thread.quit)
+        worker.failed.connect(thread.quit)
+        thread.finished.connect(worker.deleteLater)
+        thread.finished.connect(thread.deleteLater)
+        thread.finished.connect(self._quality_preview_thread_finished)
+        self._quality_preview_thread = thread
+        self._quality_preview_worker = worker
+        thread.start()
+
+    def _quality_preview_finished(self, request_id: int, position_ms: int, png_bytes: object) -> None:
+        if request_id != self._quality_preview_request_id or self._preview_mode != PREVIEW_MODE_QUALITY:
+            return
+        image = QImage.fromData(bytes(png_bytes))
+        if image.isNull():
+            self.canvas.set_quality_preview_pending(False, "Quality preview failed")
+            return
+        self.canvas.set_quality_preview_image(image, position_ms / 1000.0)
+
+    def _quality_preview_failed(self, request_id: int, message: str) -> None:
+        if request_id != self._quality_preview_request_id:
+            return
+        self.canvas.set_quality_preview_pending(False, "Quality preview failed")
+        if message:
+            self.accurate_preview_button.setToolTip(message)
+
+    def _quality_preview_thread_finished(self) -> None:
+        self._quality_preview_thread = None
+        self._quality_preview_worker = None
+        if self._quality_preview_needs_rerender and not self._shutting_down:
+            self._quality_preview_needs_rerender = False
+            self._queue_quality_preview(force=True)
 
     def _step_zoom(self, direction: int) -> None:
         if direction == 0:

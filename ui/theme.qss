@@ -425,6 +425,24 @@ QWidget#PreviewControlsBar QPushButton:hover {
     background: #E6F0FF;
 }
 
+QWidget#PreviewControlsBar QPushButton:disabled {
+    background: #697586;
+    color: #E9EEF5;
+    border: 1px solid #566171;
+}
+
+QWidget#PreviewControlsBar QPushButton[previewDisabled="quality"]:disabled {
+    background: #626D7D;
+    color: #F3F6FA;
+    border: 1px solid #4F5968;
+}
+
+QWidget#PreviewControlsBar QPushButton[previewDisabled="busy"]:disabled {
+    background: #8D98A6;
+    color: #F7F9FB;
+    border: 1px solid #768190;
+}
+
 QWidget#PreviewControlsBar QComboBox,
 QWidget#PreviewControlsBar QSpinBox {
     min-height: 24px;

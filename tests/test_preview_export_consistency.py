@@ -365,6 +365,40 @@ class PreviewExportConsistencyTests(unittest.TestCase):
         self._assert_centers_close(preview_bbox, accurate_bbox, tolerance=10.0)
         self.assertLessEqual(abs((preview_bbox[3] - preview_bbox[1]) - (accurate_bbox[3] - accurate_bbox[1])), 40)
 
+    def test_accurate_preview_frame_uses_cache_directory(self) -> None:
+        info = self._video_info(640, 360)
+        cue = SubtitleCue(1, 0.0, 1.5, "Quality preview cache")
+        style = SubtitleStyle(
+            font_family="Arial",
+            font_size=36,
+            alignment="bottom_center",
+            stroke_enabled=True,
+            stroke_width=2.5,
+            shadow_enabled=False,
+        )
+        cache_dir = self.temp_path / "quality_preview_cache"
+
+        first = render_accurate_preview_frame(
+            video_info=info,
+            cues=[cue],
+            style=style,
+            position_seconds=0.5,
+            cache_dir=cache_dir,
+        )
+        cache_files = list(cache_dir.glob("*.png"))
+        self.assertEqual(len(cache_files), 1)
+
+        second = render_accurate_preview_frame(
+            video_info=info,
+            cues=[cue],
+            style=style,
+            position_seconds=0.5,
+            cache_dir=cache_dir,
+        )
+
+        self.assertEqual(first, second)
+        self.assertGreater(cache_files[0].stat().st_size, 0)
+
 
 if __name__ == "__main__":
     unittest.main()

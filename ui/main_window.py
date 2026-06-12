@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import tempfile
+import json
 from pathlib import Path
 
-from PySide6.QtCore import QLocale, QSettings, QSignalBlocker, Qt, QThread, Signal
+from PySide6.QtCore import QLocale, QSettings, QSignalBlocker, Qt, QThread, QTimer, Signal
 from PySide6.QtGui import QAction, QColor, QFont, QFontDatabase, QFontMetrics, QImage, QKeySequence, QPainter, QPen, QShortcut
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -44,15 +45,15 @@ from PySide6.QtWidgets import (
 
 from core.project_config import ProjectConfig, load_project_config, save_project_config
 from core.audio_analysis import detect_silences
-from core.preview_renderer import PreviewRenderError, render_accurate_preview_frame
 from core.renderer import ensure_ffmpeg
 from core.style_preset import (
     ALIGNMENTS,
     SAFE_AREA_MODES,
+    effective_safe_area_insets,
+    safe_area_insets,
+    safe_area_label,
     STYLE_PRESETS,
     SubtitleStyle,
-    auto_bottom_margin,
-    auto_horizontal_margin,
     style_with_auto_size,
     style_with_overrides,
 )
@@ -63,9 +64,16 @@ from core.subtitle_parser import SUPPORTED_FORMATS, detect_subtitle_format, pars
 from core.subtitle_timing import cleanup_subtitle_timings
 from core.speech_sync import SpeechSyncOptions, SpeechSyncResult
 from core.video_info import VideoInfo, VideoProbeError, probe_video
-from core.subtitle_layout import wrap_subtitle_text
+from core.subtitle_layout import (
+    WRAP_FONT_SCALE,
+    style_for_ass_export,
+    subtitle_line_height,
+    subtitle_line_positions,
+    subtitle_max_width,
+    wrap_subtitle_text,
+)
 from ui.preview_widget import SubtitlePreviewWidget
-from ui.render_worker import RenderWorker
+from ui.render_worker import ExactPreviewFrameWorker, RenderWorker
 from ui.speech_sync_worker import SpeechSyncWorker
 from utils.timecode import format_timecode, parse_timecode, pretty_duration
 
@@ -317,11 +325,15 @@ class MainWindow(QMainWindow):
         self.subtitle_doc: SubtitleDocument | None = None
         self.render_thread: QThread | None = None
         self.render_worker: RenderWorker | None = None
+        self.exact_preview_thread: QThread | None = None
+        self.exact_preview_worker: ExactPreviewFrameWorker | None = None
         self.preview_render_thread: QThread | None = None
         self.preview_render_worker: RenderWorker | None = None
         self._exact_preview_temp_dir: tempfile.TemporaryDirectory[str] | None = None
         self.speech_thread: QThread | None = None
         self.speech_worker: SpeechSyncWorker | None = None
+        self._current_project_path: Path | None = None
+        self._last_saved_project_signature = ""
         self._updating_table = False
         self._updating_text_editor = False
         self._updating_cue_detail = False
@@ -347,11 +359,20 @@ class MainWindow(QMainWindow):
         self._migrate_collapsible_section_defaults()
         self._build_actions()
         self._build_ui()
+        self._style_update_timer = QTimer(self)
+        self._style_update_timer.setSingleShot(True)
+        self._style_update_timer.setInterval(90)
+        self._style_update_timer.timeout.connect(self._apply_preview_from_controls)
+        self._cue_style_update_timer = QTimer(self)
+        self._cue_style_update_timer.setSingleShot(True)
+        self._cue_style_update_timer.setInterval(90)
+        self._cue_style_update_timer.timeout.connect(self._apply_selected_cue_style_changed)
         self._force_arabic_digit_locale()
         self._connect_style_signals()
         self._load_style_to_controls(SubtitleStyle())
         self._apply_light_stylesheet()
         self._restore_workspace_layout()
+        self._last_saved_project_signature = self._project_state_signature(sync_table=False)
 
     def _migrate_collapsible_section_defaults(self) -> None:
         version = int(self.settings.value("sections/defaultsVersion", 0))
@@ -365,13 +386,19 @@ class MainWindow(QMainWindow):
     def _build_actions(self) -> None:
         file_menu = self.menuBar().addMenu("&File")
 
-        open_action = QAction("Open Project Config...", self)
+        open_action = QAction("Open Project...", self)
         open_action.triggered.connect(self.load_project_config)
         file_menu.addAction(open_action)
 
-        save_action = QAction("Save Project Config...", self)
+        save_action = QAction("Save", self)
+        save_action.setShortcut(QKeySequence.StandardKey.Save)
         save_action.triggered.connect(self.save_project_config)
         file_menu.addAction(save_action)
+
+        save_as_action = QAction("Save As...", self)
+        save_as_action.setShortcut(QKeySequence.StandardKey.SaveAs)
+        save_as_action.triggered.connect(self.save_project_config_as)
+        file_menu.addAction(save_as_action)
 
         view_menu = self.menuBar().addMenu("&View")
 
@@ -1450,7 +1477,7 @@ class MainWindow(QMainWindow):
         self.cue_vertical_margin_spin.setSuffix(" px")
         cue_style_form.addRow("Vertical offset", self.cue_vertical_margin_spin)
 
-        self.cue_auto_alignment_offset_label = QLabel("Auto X: - | Auto Y: -")
+        self.cue_auto_alignment_offset_label = QLabel("Auto L/R: - | T/B: -")
         cue_style_form.addRow("Auto offset", self.cue_auto_alignment_offset_label)
 
         clear_cue_style_button = QPushButton("Clear Manual Style")
@@ -1545,7 +1572,7 @@ class MainWindow(QMainWindow):
 
         self.safe_area_combo = QComboBox()
         for mode in SAFE_AREA_MODES:
-            self.safe_area_combo.addItem(mode.title(), mode)
+            self.safe_area_combo.addItem(safe_area_label(mode), mode)
         form.addRow("Safe area preset", self.safe_area_combo)
 
         self.horizontal_margin_spin = QSpinBox()
@@ -1560,7 +1587,7 @@ class MainWindow(QMainWindow):
         self.bottom_margin_spin.setToolTip("Manual distance from the top/bottom edge for top/bottom alignment.")
         form.addRow("Vertical offset", self.bottom_margin_spin)
 
-        self.auto_alignment_offset_label = QLabel("Auto X: - | Auto Y: -")
+        self.auto_alignment_offset_label = QLabel("Auto L/R: - | T/B: -")
         form.addRow("Auto offset", self.auto_alignment_offset_label)
 
         self.custom_safe_spin = QSpinBox()
@@ -1622,6 +1649,15 @@ class MainWindow(QMainWindow):
         self.preview_widget.activeCueChanged.connect(self.select_subtitle_from_playback)
         self.preview_widget.accuratePreviewRequested.connect(self.render_accurate_preview)
         self.preview_widget.accurateVideoRequested.connect(self.render_accurate_preview_video)
+        saved_cache_dir = str(self.settings.value("preview/qualityCacheDir", "") or "")
+        if saved_cache_dir:
+            try:
+                self.preview_widget.set_quality_preview_cache_dir(saved_cache_dir)
+            except OSError:
+                pass
+        self.preview_widget.set_preview_mode("fast")
+        self.preview_widget.qualityPreviewCacheDirChanged.connect(self._quality_preview_cache_dir_changed)
+        self.preview_widget.previewModeChanged.connect(self._preview_mode_changed)
         layout.addWidget(self.preview_widget)
 
         self.summary_label = QLabel("Video: - | Subtitle count: 0")
@@ -2354,6 +2390,9 @@ class MainWindow(QMainWindow):
         if not self.video_info:
             self._show_error("Exact Preview", "Please select a video first.")
             return
+        if self.exact_preview_thread is not None:
+            self.log("Exact preview frame is already rendering.")
+            return
         if not self.subtitle_doc:
             self.parse_subtitles()
         if not self.subtitle_doc:
@@ -2361,35 +2400,62 @@ class MainWindow(QMainWindow):
         if not self._sync_subtitles_from_table(show_errors=True):
             return
 
-        position_seconds = max(0.0, position_ms / 1000.0)
-        self.preview_widget.accurate_preview_button.setEnabled(False)
+        self.preview_widget.set_exact_preview_busy(True)
+        self.preview_widget.accurate_video_button.setEnabled(False)
+        self.render_preview_button.setEnabled(False)
         self.log("Rendering exact preview frame with FFmpeg/libass...")
-        try:
-            png_bytes = render_accurate_preview_frame(
-                video_info=self.video_info,
-                cues=self.subtitle_doc.cues,
-                style=self.current_style(),
-                position_seconds=position_seconds,
-            )
-        except PreviewRenderError as exc:
-            self._show_error("Exact Preview Error", str(exc))
-            return
-        except Exception as exc:
-            self._show_error("Exact Preview Error", str(exc))
-            return
-        finally:
-            self.preview_widget.accurate_preview_button.setEnabled(True)
+        self.exact_preview_thread = QThread(self)
+        self.exact_preview_worker = ExactPreviewFrameWorker(
+            video_info=self.video_info,
+            cues=self.subtitle_doc.cues,
+            style=self.current_style(),
+            position_ms=position_ms,
+            cache_dir=self.preview_widget.quality_preview_cache_dir(),
+        )
+        self.exact_preview_worker.moveToThread(self.exact_preview_thread)
+        self.exact_preview_thread.started.connect(self.exact_preview_worker.run)
+        self.exact_preview_worker.finished.connect(self._accurate_preview_finished)
+        self.exact_preview_worker.failed.connect(self._accurate_preview_failed)
+        self.exact_preview_worker.finished.connect(self.exact_preview_thread.quit)
+        self.exact_preview_worker.failed.connect(self.exact_preview_thread.quit)
+        self.exact_preview_thread.finished.connect(self.exact_preview_worker.deleteLater)
+        self.exact_preview_thread.finished.connect(self.exact_preview_thread.deleteLater)
+        self.exact_preview_thread.finished.connect(self._accurate_preview_frame_thread_finished)
+        self.exact_preview_thread.start()
 
-        image = QImage.fromData(png_bytes, "PNG")
+    def _quality_preview_cache_dir_changed(self, path: str) -> None:
+        self.settings.setValue("preview/qualityCacheDir", path)
+        self.settings.sync()
+        self.log(f"Quality preview cache directory set to: {path}")
+
+    def _preview_mode_changed(self, mode: str) -> None:
+        self.settings.setValue("preview/mode", "fast")
+        self.settings.sync()
+
+    def _accurate_preview_finished(self, position_ms: int, png_bytes: object) -> None:
+        image = QImage.fromData(bytes(png_bytes), "PNG")
         if image.isNull():
             self._show_error("Exact Preview Error", "FFmpeg returned an unreadable preview frame.")
             return
         self.preview_widget.show_accurate_preview_image(image, position_ms)
         self.log("Exact preview frame rendered. This frame uses the same FFmpeg/libass renderer as export.")
 
+    def _accurate_preview_failed(self, message: str) -> None:
+        self._show_error("Exact Preview Error", message)
+
+    def _accurate_preview_frame_thread_finished(self) -> None:
+        self.preview_widget.set_exact_preview_busy(False)
+        self.preview_widget.accurate_video_button.setEnabled(True)
+        self.render_preview_button.setEnabled(True)
+        self.exact_preview_thread = None
+        self.exact_preview_worker = None
+
     def render_accurate_preview_video(self) -> None:
         if not self.video_info:
             self._show_error("Render Preview Video", "Please select a video first.")
+            return
+        if self.exact_preview_thread is not None:
+            self._show_error("Render Preview Video", "Exact preview frame is still rendering.")
             return
         if self.preview_render_thread is not None:
             self._show_error("Render Preview Video", "Preview video is already rendering.")
@@ -2406,7 +2472,7 @@ class MainWindow(QMainWindow):
         self._exact_preview_temp_dir = tempfile.TemporaryDirectory(prefix="smart_subtitle_exact_video_")
         output_path = str(Path(self._exact_preview_temp_dir.name) / "exact_preview.mp4")
         self.preview_widget.accurate_video_button.setEnabled(False)
-        self.preview_widget.accurate_preview_button.setEnabled(False)
+        self.preview_widget.set_exact_preview_busy(True)
         self.render_preview_button.setEnabled(False)
         self.progress_bar.setValue(0)
         self.log("Rendering preview video with FFmpeg/libass. This uses the same path as final export and may take a while.")
@@ -2443,7 +2509,7 @@ class MainWindow(QMainWindow):
 
     def _accurate_preview_thread_finished(self) -> None:
         self.preview_widget.accurate_video_button.setEnabled(True)
-        self.preview_widget.accurate_preview_button.setEnabled(True)
+        self.preview_widget.set_exact_preview_busy(False)
         self.render_preview_button.setEnabled(True)
         self.preview_render_thread = None
         self.preview_render_worker = None
@@ -2635,7 +2701,7 @@ class MainWindow(QMainWindow):
 
         if self.max_width_spin.value() > 90:
             self.max_width_spin.setValue(90)
-            notes.append("Max width was reduced to 90% to keep text inside the safe area.")
+            notes.append("Max width was reduced to 90% before fitting text inside the selected safe area.")
 
         max_font_size = max(28, round(min(self.video_info.width, self.video_info.height) * 0.085))
         if self.font_size_spin.value() > max_font_size:
@@ -2657,9 +2723,13 @@ class MainWindow(QMainWindow):
             self._sync_color_button(self.stroke_color_button, "#000000")
             notes.append("Stroke was enabled because no outline/background/shadow was active.")
 
-        if self.bottom_margin_spin.value() == 0 and self.safe_area_combo.currentData() != "auto":
-            self._set_combo_data(self.safe_area_combo, "auto")
-            notes.append("Safe area was set to Auto.")
+        if self.video_info:
+            style = self.current_style()
+            insets = safe_area_insets(self.video_info, style)
+            notes.append(
+                f"Using {safe_area_label(style.safe_area_mode)} safe area: "
+                f"L{insets.left} T{insets.top} R{insets.right} B{insets.bottom}px."
+            )
 
         return notes
 
@@ -2674,8 +2744,6 @@ class MainWindow(QMainWindow):
         arranged: list[SubtitleCue] = []
         remaining_issues: list[str] = []
         max_lines = max(1, int(self.max_lines_spin.value()))
-        min_font_size = 18
-        font_note_added = False
         stroke_note_added = False
 
         for _attempt in range(80):
@@ -2691,15 +2759,6 @@ class MainWindow(QMainWindow):
             if not remaining_issues:
                 notes.append(f"Checked {len(arranged)} cue(s): no hidden text or edge overflow detected.")
                 return arranged, notes, []
-
-            font_value = int(self.font_size_spin.value())
-            if font_value > min_font_size:
-                new_size = max(min_font_size, font_value - 2)
-                self.font_size_spin.setValue(new_size)
-                if not font_note_added or new_size == min_font_size:
-                    notes.append(f"Reduced font size to {new_size} while checking subtitle visibility.")
-                    font_note_added = True
-                continue
 
             if self.stroke_check.isChecked() and self.stroke_width_spin.value() > 0:
                 new_stroke = max(0.0, float(self.stroke_width_spin.value()) - 0.5)
@@ -2720,26 +2779,54 @@ class MainWindow(QMainWindow):
         issues: list[str] = []
         for cue in cues:
             cue_style = style_with_overrides(style, cue.style_overrides)
+            ass_style = style_for_ass_export(cue_style)
             font = QFont(cue_style.font_family)
-            font.setPixelSize(max(1, int(cue_style.font_size)))
+            font.setPixelSize(max(1, round(cue_style.font_size * WRAP_FONT_SCALE)))
             metrics = QFontMetrics(font)
-            safe_width = self.video_info.width * max(20, min(cue_style.max_width_percent, 100)) / 100
+            insets = effective_safe_area_insets(self.video_info, cue_style)
+            safe_left = insets.left
+            safe_top = insets.top
+            safe_right = self.video_info.width - insets.right
+            safe_bottom = self.video_info.height - insets.bottom
+            safe_width = max(1, safe_right - safe_left)
+            max_width = subtitle_max_width(self.video_info, cue_style)
             decoration_width = 0.0
             if cue_style.stroke_enabled:
                 decoration_width += max(0.0, cue_style.stroke_width) * 2
             if cue_style.shadow_enabled:
                 decoration_width += max(0.0, cue_style.shadow_offset)
             max_lines = max(1, cue_style.max_lines)
-            line_height = metrics.height() + max(0, cue_style.line_spacing)
-            vertical_limit = max(1, self.video_info.height - self._subtitle_vertical_reserved_space(cue_style))
+            line_height = subtitle_line_height(ass_style)
+            vertical_limit = max(1, safe_bottom - safe_top)
             lines = wrap_subtitle_text(cue.text, self.video_info, cue_style, limit_lines=False)
             if len(lines) > max_lines:
                 issues.append(f"cue {cue.index}: {len(lines)} lines exceed max {max_lines}")
-            widest = max((metrics.horizontalAdvance(line) for line in lines), default=0)
-            if widest + decoration_width > safe_width:
-                issues.append(f"cue {cue.index}: text width exceeds safe area")
             if line_height * len(lines) > vertical_limit:
-                issues.append(f"cue {cue.index}: subtitle block is taller than the safe area")
+                issues.append(f"cue {cue.index}: subtitle block is taller than the selected safe area")
+
+            widest = max((metrics.horizontalAdvance(line) for line in lines), default=0)
+            if widest + decoration_width > max_width:
+                issues.append(f"cue {cue.index}: text width exceeds selected safe area")
+
+            positions = subtitle_line_positions(self.video_info, ass_style, len(lines), renderer="ass")
+            for line_index, (_line, (x, y, an)) in enumerate(zip(lines, positions), start=1):
+                if an == 4:
+                    left = x
+                    right = x + max_width
+                elif an == 6:
+                    left = x - max_width
+                    right = x
+                else:
+                    left = x - (max_width / 2)
+                    right = x + (max_width / 2)
+                top = y - (line_height / 2)
+                bottom = y + (line_height / 2)
+                if left < safe_left - 1 or right > safe_right + 1:
+                    issues.append(f"cue {cue.index}: line {line_index} is outside horizontal safe area")
+                    break
+                if top < safe_top - 1 or bottom > safe_bottom + 1:
+                    issues.append(f"cue {cue.index}: line {line_index} is outside vertical safe area")
+                    break
 
         return issues
 
@@ -2748,11 +2835,8 @@ class MainWindow(QMainWindow):
             return 0
         if style.alignment == "center" or style.text_position == "custom":
             return round(self.video_info.height * 0.08)
-        if style.alignment == "top_center":
-            return max(0, style.bottom_margin)
-        from core.style_preset import effective_bottom_margin
-
-        return effective_bottom_margin(self.video_info, style)
+        insets = effective_safe_area_insets(self.video_info, style)
+        return insets.top if style.alignment == "top_center" else insets.bottom
 
     def _compact_cue_text(self, cues: list[SubtitleCue]) -> str:
         return "".join("".join(cue.text.split()) for cue in cues)
@@ -2846,6 +2930,12 @@ class MainWindow(QMainWindow):
         del args
         if self._updating_cue_style_controls:
             return
+        self.preview_widget.defer_quality_preview()
+        self._cue_style_update_timer.start()
+
+    def _apply_selected_cue_style_changed(self) -> None:
+        if self._updating_cue_style_controls:
+            return
         row = self.subtitle_table.currentRow()
         if row < 0:
             return
@@ -2921,11 +3011,12 @@ class MainWindow(QMainWindow):
             f"Reference: {self._alignment_reference_text(cue_style.alignment)}"
         )
         if self.video_info:
-            auto_x = auto_horizontal_margin(self.video_info, cue_style)
-            auto_y = auto_bottom_margin(self.video_info, cue_style)
-            self.cue_auto_alignment_offset_label.setText(f"Auto X: {auto_x} px | Auto Y: {auto_y} px")
+            insets = safe_area_insets(self.video_info, cue_style)
+            self.cue_auto_alignment_offset_label.setText(
+                f"Auto L/R: {insets.left}/{insets.right} px | T/B: {insets.top}/{insets.bottom} px"
+            )
         else:
-            self.cue_auto_alignment_offset_label.setText("Auto X: - | Auto Y: -")
+            self.cue_auto_alignment_offset_label.setText("Auto L/R: - | T/B: -")
 
     def _load_selected_text_to_editor(self, text: str) -> None:
         if self.subtitle_text_editor.toPlainText() == text:
@@ -3069,6 +3160,9 @@ class MainWindow(QMainWindow):
         if not self.video_info:
             self._show_error("Export Error", "Please select a video first.")
             return
+        if self.render_thread is not None:
+            self._show_error("Export Error", "Export is already running.")
+            return
         if not self.subtitle_doc:
             self.parse_subtitles()
         if not self.subtitle_doc:
@@ -3117,6 +3211,7 @@ class MainWindow(QMainWindow):
         self.render_worker.failed.connect(self.render_thread.quit)
         self.render_thread.finished.connect(self.render_worker.deleteLater)
         self.render_thread.finished.connect(self.render_thread.deleteLater)
+        self.render_thread.finished.connect(self._render_thread_finished)
         self.render_thread.start()
 
     def export_edited_subtitle(self) -> None:
@@ -3196,45 +3291,56 @@ class MainWindow(QMainWindow):
         self.log(f"Export failed: {message}")
         self._show_error("Export Failed", message)
 
-    def save_project_config(self) -> None:
+    def _render_thread_finished(self) -> None:
+        self.render_thread = None
+        self.render_worker = None
+
+    def save_project_config(self) -> bool:
+        if self._current_project_path is None:
+            return self.save_project_config_as()
+        return self._save_project_to_path(self._current_project_path)
+
+    def save_project_config_as(self) -> bool:
+        if self.subtitle_table.rowCount() > 0 and not self._sync_subtitles_from_table(show_errors=True):
+            return False
         path, _ = QFileDialog.getSaveFileName(
             self,
-            "Save Project Config",
-            "smart_subtitle_project.json",
+            "Save Project As",
+            self._project_save_dialog_start_path(),
             "JSON Files (*.json);;All Files (*.*)",
         )
         if not path:
-            return
-        config = ProjectConfig(
-            video_path=self.video_path_edit.text().strip(),
-            subtitle_path=self.subtitle_path_edit.text().strip(),
-            subtitle_format=str(self.format_combo.currentData()),
-            txt_mode=str(self.txt_mode_combo.currentData()),
-            txt_fixed_duration=float(self.txt_duration_spin.value()),
-            hold_after_sentence=float(self.hold_after_spin.value()),
-            min_display_duration=float(self.min_display_spin.value()),
-            max_display_duration=float(self.max_display_spin.value()),
-            use_silence_detection=self.use_silence_detect_check.isChecked(),
-            output_path=self.output_path_edit.text().strip(),
-            style=self.current_style(),
-        )
+            return False
+        return self._save_project_to_path(self._normalize_project_path(path))
+
+    def _save_project_to_path(self, path: str | Path) -> bool:
+        if self.subtitle_table.rowCount() > 0 and not self._sync_subtitles_from_table(show_errors=True):
+            return False
+        target = self._normalize_project_path(path)
+        config = self._current_project_config()
         try:
-            save_project_config(path, config)
-            self.log(f"Saved project config: {path}")
+            save_project_config(target, config)
+            self._current_project_path = target
+            self._remember_project_dir(target.parent)
+            self._last_saved_project_signature = self._project_state_signature(config=config, sync_table=False)
+            self.log(f"Saved project: {target}")
+            return True
         except Exception as exc:
             self._show_error("Save Config Error", str(exc))
+            return False
 
     def load_project_config(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
             self,
-            "Open Project Config",
-            "",
+            "Open Project",
+            self._project_open_dialog_start_dir(),
             "JSON Files (*.json);;All Files (*.*)",
         )
         if not path:
             return
+        project_path = Path(path).expanduser().resolve()
         try:
-            config = load_project_config(path)
+            config = load_project_config(project_path)
         except Exception as exc:
             self._show_error("Load Config Error", str(exc))
             return
@@ -3253,12 +3359,147 @@ class MainWindow(QMainWindow):
 
         if config.video_path:
             self.load_video_info(config.video_path)
-        if config.subtitle_path:
+        if config.subtitle_cues:
+            self._restore_project_subtitles(config)
+        elif config.subtitle_path:
             self.parse_subtitles()
-        self.log(f"Loaded project config: {path}")
+        elif self.subtitle_doc:
+            self.subtitle_doc = None
+            self._populate_subtitle_table()
+            self._refresh_preview_data()
+            self._update_summary()
+        self._current_project_path = project_path
+        self._remember_project_dir(project_path.parent)
+        self._last_saved_project_signature = self._project_state_signature(sync_table=False)
+        self.log(f"Loaded project: {project_path}")
+
+    def _normalize_project_path(self, path: str | Path) -> Path:
+        target = Path(path).expanduser()
+        if not target.suffix:
+            target = target.with_suffix(".json")
+        return target.resolve()
+
+    def _project_default_filename(self) -> str:
+        video_path = Path(self.video_path_edit.text().strip()) if self.video_path_edit.text().strip() else None
+        if video_path and video_path.stem:
+            return f"{video_path.stem}_smart_subtitle_project.json"
+        return "smart_subtitle_project.json"
+
+    def _project_save_dialog_start_path(self) -> str:
+        if self._current_project_path is not None:
+            return str(self._current_project_path)
+        filename = self._project_default_filename()
+        directory = self._last_project_dir() or self._video_directory() or Path.cwd()
+        return str(directory / filename)
+
+    def _project_open_dialog_start_dir(self) -> str:
+        directory = self._last_project_dir() or self._video_directory()
+        return str(directory) if directory else ""
+
+    def _last_project_dir(self) -> Path | None:
+        raw = str(self.settings.value("project/lastSaveDir", "") or "")
+        if not raw:
+            return None
+        path = Path(raw).expanduser()
+        return path if path.exists() and path.is_dir() else None
+
+    def _video_directory(self) -> Path | None:
+        raw = self.video_path_edit.text().strip()
+        if not raw:
+            return None
+        path = Path(raw).expanduser()
+        directory = path.parent
+        return directory if directory.exists() and directory.is_dir() else None
+
+    def _remember_project_dir(self, directory: Path) -> None:
+        self.settings.setValue("project/lastSaveDir", str(directory.resolve()))
+        self.settings.sync()
+
+    def _current_project_config(self) -> ProjectConfig:
+        selected_row = self.subtitle_table.currentRow()
+        return ProjectConfig(
+            video_path=self.video_path_edit.text().strip(),
+            subtitle_path=self.subtitle_path_edit.text().strip(),
+            subtitle_format=str(self.format_combo.currentData()),
+            txt_mode=str(self.txt_mode_combo.currentData()),
+            txt_fixed_duration=float(self.txt_duration_spin.value()),
+            hold_after_sentence=float(self.hold_after_spin.value()),
+            min_display_duration=float(self.min_display_spin.value()),
+            max_display_duration=float(self.max_display_spin.value()),
+            use_silence_detection=self.use_silence_detect_check.isChecked(),
+            output_path=self.output_path_edit.text().strip(),
+            style=self.current_style(),
+            subtitle_cues=list(self.subtitle_doc.cues if self.subtitle_doc else []),
+            subtitle_source_format=self.subtitle_doc.source_format if self.subtitle_doc else "unknown",
+            selected_row=max(0, selected_row),
+            playhead_ms=max(0, int(self._current_playhead_ms)),
+        )
+
+    def _project_state_signature(
+        self,
+        *,
+        config: ProjectConfig | None = None,
+        sync_table: bool = True,
+    ) -> str:
+        if config is None:
+            if sync_table and self.subtitle_table.rowCount() > 0:
+                self._sync_subtitles_from_table(show_errors=False)
+            config = self._current_project_config()
+        payload = config.to_dict()
+        # Selection and playhead are restored for convenience, but moving around
+        # the preview should not make the user answer an unsaved-work prompt.
+        payload["selected_row"] = 0
+        payload["playhead_ms"] = 0
+        return json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str)
+
+    def _has_unsaved_project_changes(self) -> bool:
+        return self._project_state_signature() != self._last_saved_project_signature
+
+    def _confirm_close_with_unsaved_changes(self) -> bool:
+        if not self._has_unsaved_project_changes():
+            return True
+        answer = QMessageBox.question(
+            self,
+            "Unsaved Project",
+            "This project has unsaved changes.\n\nDo you want to save before closing?",
+            (
+                QMessageBox.StandardButton.Save
+                | QMessageBox.StandardButton.Discard
+                | QMessageBox.StandardButton.Cancel
+            ),
+            QMessageBox.StandardButton.Save,
+        )
+        if answer == QMessageBox.StandardButton.Save:
+            if self._current_project_path is None:
+                return self.save_project_config_as()
+            return self._save_project_to_path(self._current_project_path)
+        if answer == QMessageBox.StandardButton.Discard:
+            return True
+        return False
+
+    def _restore_project_subtitles(self, config: ProjectConfig) -> None:
+        cues = [
+            SubtitleCue(index + 1, cue.start, cue.end, cue.text, dict(cue.style_overrides))
+            for index, cue in enumerate(config.subtitle_cues)
+        ]
+        self.subtitle_doc = SubtitleDocument(cues=cues, source_format=config.subtitle_source_format)
+        self._populate_subtitle_table()
+        self._refresh_preview_data()
+        if cues:
+            row = max(0, min(config.selected_row, len(cues) - 1))
+            self.subtitle_table.selectRow(row)
+            self.preview_widget.set_sample_cue(cues[row])
+        self.preview_widget.seek_to(max(0, config.playhead_ms))
+        self._sync_current_time_from_preview(max(0, config.playhead_ms))
+        self._update_summary()
+        self._push_history()
 
     def _update_preview_from_controls(self, *args) -> None:
         del args
+        self.preview_widget.defer_quality_preview()
+        self._style_update_timer.start()
+
+    def _apply_preview_from_controls(self) -> None:
         self._refresh_alignment_offset_ui()
         self.preview_widget.set_style(self.current_style())
         self.preview_selected_subtitle()
@@ -3270,11 +3511,12 @@ class MainWindow(QMainWindow):
         self.bottom_margin_spin.setEnabled(manual)
         self.alignment_reference_label.setText(f"Reference: {self._alignment_reference_text(base_style.alignment)}")
         if self.video_info:
-            auto_x = auto_horizontal_margin(self.video_info, base_style)
-            auto_y = auto_bottom_margin(self.video_info, base_style)
-            self.auto_alignment_offset_label.setText(f"Auto X: {auto_x} px | Auto Y: {auto_y} px")
+            insets = safe_area_insets(self.video_info, base_style)
+            self.auto_alignment_offset_label.setText(
+                f"Auto L/R: {insets.left}/{insets.right} px | T/B: {insets.top}/{insets.bottom} px"
+            )
         else:
-            self.auto_alignment_offset_label.setText("Auto X: - | Auto Y: -")
+            self.auto_alignment_offset_label.setText("Auto L/R: - | T/B: -")
 
         row = self.subtitle_table.currentRow()
         if self.subtitle_doc and 0 <= row < len(self.subtitle_doc.cues):
@@ -3332,8 +3574,40 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(message[:180], 7000)
 
     def closeEvent(self, event) -> None:  # noqa: N802 - Qt override
+        if self._background_tasks_running():
+            QMessageBox.warning(
+                self,
+                "Smart Subtitle",
+                "A render, preview render, or speech sync task is still running. Please wait for it to finish before closing.",
+            )
+            event.ignore()
+            return
+        if not self._confirm_close_with_unsaved_changes():
+            event.ignore()
+            return
+        self.preview_widget.shutdown()
         self._save_workspace_layout()
         super().closeEvent(event)
+
+    def _background_tasks_running(self) -> bool:
+        return any(
+            self._thread_is_running(thread)
+            for thread in (
+                self.render_thread,
+                self.exact_preview_thread,
+                self.preview_render_thread,
+                self.speech_thread,
+            )
+        )
+
+    @staticmethod
+    def _thread_is_running(thread: QThread | None) -> bool:
+        if thread is None:
+            return False
+        try:
+            return thread.isRunning()
+        except RuntimeError:
+            return False
 
     def showEvent(self, event) -> None:  # noqa: N802 - Qt override
         super().showEvent(event)
